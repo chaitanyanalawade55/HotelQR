@@ -10,10 +10,12 @@ import {
   LogOut,
   ShoppingBag,
   Settings,
+  Wallet,
   Menu as MenuIcon,
   X,
   ExternalLink,
   Bell,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -21,6 +23,7 @@ import type { Hotel, Order } from "@/types/database";
 
 interface DashboardShellProps {
   hotel: Hotel;
+  isSuperAdmin?: boolean;
   children: React.ReactNode;
 }
 
@@ -30,6 +33,7 @@ const navItems = [
   { href: "/dashboard/branding", label: "Branding", icon: Palette },
   { href: "/dashboard/qr", label: "QR", icon: QrCode },
   { href: "/dashboard/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/dashboard/payments", label: "Payments", icon: Wallet },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -74,7 +78,7 @@ function CountBadge({ count, className = "" }: { count: number; className?: stri
   );
 }
 
-export function DashboardShell({ hotel, children }: DashboardShellProps) {
+export function DashboardShell({ hotel, isSuperAdmin = false, children }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -189,6 +193,16 @@ export function DashboardShell({ hotel, children }: DashboardShellProps) {
 
         <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
           <NavLinks onNavigate={onNavigate} />
+          {isSuperAdmin && (
+            <Link
+              href="/superadmin"
+              onClick={onNavigate}
+              className="flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-2xl text-[#FBBF24] hover:bg-white/10 transition-all duration-150"
+            >
+              <ShieldCheck size={18} />
+              Super Admin
+            </Link>
+          )}
         </nav>
 
         <div className="border-t border-white/10 p-3">

@@ -31,5 +31,12 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  return <DashboardShell hotel={hotel as Hotel}>{children}</DashboardShell>;
+  // Super-admin flag for the nav link (graceful if migration 0008 isn't applied).
+  const { data: isSuperAdmin } = await supabase.rpc("is_super_admin");
+
+  return (
+    <DashboardShell hotel={hotel as Hotel} isSuperAdmin={Boolean(isSuperAdmin)}>
+      {children}
+    </DashboardShell>
+  );
 }

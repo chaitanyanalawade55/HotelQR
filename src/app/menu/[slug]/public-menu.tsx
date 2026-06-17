@@ -52,6 +52,18 @@ function matchesFilters(item: MenuItem, q: string, foodFilter: FoodFilter) {
   return true;
 }
 
+// Merge newly-added cart lines into an existing order's lines, summing the
+// quantity when the same dish is ordered again (for the local status display).
+function mergeCartItems(existing: CartItem[], added: CartItem[]): CartItem[] {
+  const merged = existing.map((c) => ({ ...c }));
+  for (const a of added) {
+    const found = merged.find((c) => c.itemId === a.itemId);
+    if (found) found.qty += a.qty;
+    else merged.push({ ...a });
+  }
+  return merged;
+}
+
 // Derive the table number from a table-specific slug ("hotel-t5-1234" -> "5").
 function tableNumberFromSlug(slug: string): string | null {
   const idx = slug.indexOf("-t");
@@ -79,6 +91,9 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
   const [ratings, setRatings] = useState<RatingAgg>({});
   const [ratingItem, setRatingItem] = useState<MenuItem | null>(null);
   const [activeOrder, setActiveOrder] = useState<ActiveOrder | null>(null);
+  // The order-status screen overlays the menu. Hiding it (without clearing the
+  // active order) lets the customer browse and add more items to the SAME order.
+  const [statusOpen, setStatusOpen] = useState(false);
   const catTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const supabase = createClient();
 
@@ -165,6 +180,7 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
         return;
       }
       setActiveOrder(saved);
+      setStatusOpen(true);
     } catch {
       /* ignore */
     }
@@ -210,14 +226,55 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
     localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
   }
 
+  function persistOrder(order: ActiveOrder | null) {
+    try {
+      if (order) localStorage.setItem(orderKey, JSON.stringify(order));
+      else localStorage.removeItem(orderKey);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Try to append the current cart to an already-placed order on this table so
+  // the manager sees the SAME order grow (a realtime UPDATE) rather than a
+  // second row. Returns false if there's no open order to append to.
+  async function appendToActiveOrder(): Promise<boolean> {
+    if (!activeOrder || activeOrder.status !== "new") return false;
+    const newItems = cart.map((c) => ({ item_id: c.itemId, name: c.name, price: c.price, qty: c.qty }));
+    const { data, error } = await supabase.rpc("append_to_order", {
+      p_order_id: activeOrder.id,
+      p_token: activeOrder.token,
+      p_items: newItems,
+      p_added_total: cartTotal,
+    });
+    if (error || data !== true) return false;
+    const merged = mergeCartItems(activeOrder.items, cart);
+    const updated: ActiveOrder = { ...activeOrder, items: merged, total: activeOrder.total + cartTotal };
+    persistOrder(updated);
+    setActiveOrder(updated);
+    setCart([]);
+    setCartOpen(false);
+    setStatusOpen(true);
+    toast.success("Added to your order! 🎉");
+    return true;
+  }
+
   async function placeOrder() {
-    const table = tableNumber ?? (manualTable.trim() || null);
+    if (cart.length === 0) return;
+    setPlacing(true);
+
+    // Same table, order still open → fold the new items into it.
+    if (await appendToActiveOrder()) {
+      setPlacing(false);
+      return;
+    }
+
+    const table = activeOrder?.table ?? tableNumber ?? (manualTable.trim() || null);
     if (!table) {
+      setPlacing(false);
       toast.error("Please enter your table number");
       return;
     }
-    if (cart.length === 0) return;
-    setPlacing(true);
     const id = uuid();
     const token = uuid();
     const row = {
@@ -236,7 +293,10 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
     }
     setPlacing(false);
     if (error) {
-      toast.error("Could not place order. Please try again.");
+      // Surface the real cause — almost always a missing RLS INSERT policy on
+      // `orders` for the anon role (run migration 0009). See console for code.
+      console.error("Order insert failed:", error);
+      toast.error(error.message ? `Could not place order: ${error.message}` : "Could not place order. Please try again.");
       return;
     }
     const order: ActiveOrder = {
@@ -249,12 +309,9 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
       cancelMinutes,
       status: "new",
     };
-    try {
-      localStorage.setItem(orderKey, JSON.stringify(order));
-    } catch {
-      /* ignore */
-    }
+    persistOrder(order);
     setActiveOrder(order);
+    setStatusOpen(true);
     setCart([]);
     setCartOpen(false);
     setManualTable("");
@@ -298,22 +355,21 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
       return;
     }
     const cancelled: ActiveOrder = { ...activeOrder, status: "cancelled" };
-    try {
-      localStorage.setItem(orderKey, JSON.stringify(cancelled));
-    } catch {
-      /* ignore */
-    }
+    persistOrder(cancelled);
     setActiveOrder(cancelled);
     toast.success("Order cancelled");
   }
 
+  // "Add more items" — keep the active order, just drop back to the menu so the
+  // next "Place order" appends to it.
+  function addMoreItems() {
+    setStatusOpen(false);
+  }
+
   function dismissOrder() {
-    try {
-      localStorage.removeItem(orderKey);
-    } catch {
-      /* ignore */
-    }
+    persistOrder(null);
     setActiveOrder(null);
+    setStatusOpen(false);
   }
 
   return (
@@ -490,6 +546,21 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
           <Bell size={22} style={{ color: themeColor }} />
         </button>
 
+        {/* Re-open the active order when browsing to add more items (cart empty) */}
+        {activeOrder && !statusOpen && cartCount === 0 && (
+          <button
+            onClick={() => setStatusOpen(true)}
+            className="pointer-events-auto absolute bottom-0 inset-x-0 flex items-center justify-between px-5 py-4 text-left"
+            style={{ backgroundColor: themeColor }}
+          >
+            <div>
+              <p className="text-white text-sm font-medium">Your order · Table {activeOrder.table}</p>
+              <p className="text-white/80 text-xs">Tap to view · add more from the menu</p>
+            </div>
+            <span className="text-white font-semibold text-sm">View order →</span>
+          </button>
+        )}
+
         {/* Cart bar */}
         {cartCount > 0 && (
           <button
@@ -518,6 +589,7 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
           manualTable={manualTable}
           setManualTable={setManualTable}
           placing={placing}
+          appendMode={Boolean(activeOrder && activeOrder.status === "new")}
           onClose={() => setCartOpen(false)}
           onChangeQty={changeQty}
           onPlaceOrder={placeOrder}
@@ -530,8 +602,14 @@ export function PublicMenu({ hotel, settings, categories, items: initialItems, t
       )}
 
       {/* Order status — shown after placing, covering the menu like a redirect */}
-      {activeOrder && (
-        <OrderStatus order={activeOrder} themeColor={themeColor} onCancel={cancelOrder} onBack={dismissOrder} />
+      {activeOrder && statusOpen && (
+        <OrderStatus
+          order={activeOrder}
+          themeColor={themeColor}
+          onCancel={cancelOrder}
+          onBack={dismissOrder}
+          onAddMore={addMoreItems}
+        />
       )}
     </div>
   );
@@ -700,6 +778,7 @@ const CartSheet = memo(function CartSheet({
   manualTable,
   setManualTable,
   placing,
+  appendMode,
   onClose,
   onChangeQty,
   onPlaceOrder,
@@ -711,6 +790,7 @@ const CartSheet = memo(function CartSheet({
   manualTable: string;
   setManualTable: (v: string) => void;
   placing: boolean;
+  appendMode: boolean;
   onClose: () => void;
   onChangeQty: (itemId: string, delta: number) => void;
   onPlaceOrder: () => void;
@@ -784,7 +864,11 @@ const CartSheet = memo(function CartSheet({
           className="w-full rounded-2xl py-3.5 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
           style={{ backgroundColor: themeColor }}
         >
-          {placing ? "Placing order..." : `Place order · ₹${total}`}
+          {placing
+            ? appendMode
+              ? "Adding..."
+              : "Placing order..."
+            : `${appendMode ? "Add to order" : "Place order"} · ₹${total}`}
         </button>
       </div>
     </div>
@@ -838,11 +922,13 @@ function OrderStatus({
   themeColor,
   onCancel,
   onBack,
+  onAddMore,
 }: {
   order: ActiveOrder;
   themeColor: string;
   onCancel: () => void | Promise<void>;
   onBack: () => void;
+  onAddMore: () => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [cancelling, setCancelling] = useState(false);
@@ -932,7 +1018,7 @@ function OrderStatus({
         {cancelled && <p className="mt-4 text-center text-sm text-[#6B7280]">This order was cancelled.</p>}
 
         <button
-          onClick={onBack}
+          onClick={cancelled ? onBack : onAddMore}
           className="mt-5 w-full rounded-2xl py-3.5 text-white font-semibold text-sm active:scale-[0.98] transition-transform"
           style={{ backgroundColor: themeColor }}
         >
