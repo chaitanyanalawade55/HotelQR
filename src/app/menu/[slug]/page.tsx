@@ -8,6 +8,10 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
+// Columns that always exist (badge is appended separately so a missing-column
+// error before the migration doesn't take down the whole menu).
+const ITEM_COLS = "id,category_id,name,description,price,image_url,food_type,is_available,sort_order";
+
 // ISR — page is pre-rendered HTML, regenerated at most once every 60s.
 export const dynamic = "force-static";
 export const revalidate = 60;
@@ -68,7 +72,7 @@ export default async function PublicMenuPage({ params }: PageProps) {
   if (!hotel) notFound();
 
   // Fetch the three datasets in parallel; select only the columns we render.
-  const [{ data: categories }, { data: items }, { data: settings }] = await Promise.all([
+  const [categoriesRes, itemsRes, settingsRes] = await Promise.all([
     supabase
       .from("categories")
       .select("id,name,sort_order")
@@ -77,7 +81,7 @@ export default async function PublicMenuPage({ params }: PageProps) {
       .order("sort_order"),
     supabase
       .from("menu_items")
-      .select("id,category_id,name,description,price,image_url,food_type,is_available,sort_order,badge")
+      .select(`${ITEM_COLS},badge`)
       .eq("hotel_id", hotel.id)
       .eq("is_available", true)
       .order("sort_order"),
@@ -88,11 +92,24 @@ export default async function PublicMenuPage({ params }: PageProps) {
       .single(),
   ]);
 
+  // Gracefully degrade if the optional `badge` column hasn't been migrated yet —
+  // the menu still renders, just without badges.
+  let items: unknown = itemsRes.data;
+  if (itemsRes.error) {
+    const retry = await supabase
+      .from("menu_items")
+      .select(ITEM_COLS)
+      .eq("hotel_id", hotel.id)
+      .eq("is_available", true)
+      .order("sort_order");
+    items = retry.data;
+  }
+
   return (
     <PublicMenu
       hotel={hotel as unknown as Hotel}
-      settings={(settings as unknown as HotelSettings) ?? null}
-      categories={(categories as unknown as Category[]) ?? []}
+      settings={(settingsRes.data as unknown as HotelSettings) ?? null}
+      categories={(categoriesRes.data as unknown as Category[]) ?? []}
       items={(items as unknown as MenuItem[]) ?? []}
       tableSlug={slug}
     />

@@ -141,17 +141,21 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
   // Optimistic save — UI already reflects edits; revert if the write fails.
   async function saveItem(item: MenuItem) {
     setEditingItemId(null);
-    const { error } = await supabase
+    const base = {
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      food_type: item.food_type,
+      image_url: item.image_url,
+    };
+    let { error } = await supabase
       .from("menu_items")
-      .update({
-        name: item.name,
-        description: item.description,
-        price: item.price,
-        food_type: item.food_type,
-        image_url: item.image_url,
-        badge: item.badge,
-      })
+      .update({ ...base, badge: item.badge })
       .eq("id", item.id);
+    // If the `badge` column hasn't been migrated yet, persist everything else.
+    if (error && (error.code === "42703" || /badge/i.test(error.message))) {
+      ({ error } = await supabase.from("menu_items").update(base).eq("id", item.id));
+    }
     if (error) {
       restoreSnapshot();
       toast.error("Save failed, changes reverted");
