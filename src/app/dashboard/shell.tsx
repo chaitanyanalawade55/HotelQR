@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -13,10 +13,11 @@ import {
   Menu as MenuIcon,
   X,
   ExternalLink,
+  Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import type { Hotel } from "@/types/database";
+import type { Hotel, Order } from "@/types/database";
 
 interface DashboardShellProps {
   hotel: Hotel;
@@ -32,17 +33,91 @@ const navItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
+const ORDERS_HREF = "/dashboard/orders";
+
 // The four most-used sections get a spot in the mobile bottom bar; everything
 // else lives in the slide-in drawer.
-const bottomBarHrefs = ["/dashboard", "/dashboard/menu", "/dashboard/orders", "/dashboard/qr"];
+const bottomBarHrefs = ["/dashboard", "/dashboard/menu", ORDERS_HREF, "/dashboard/qr"];
+
+// Short notification beep via Web Audio — no audio file needed.
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {
+    // audio not available
+  }
+}
+
+function CountBadge({ count, className = "" }: { count: number; className?: string }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className={[
+        "bg-[#EF4444] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center animate-pulse",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
 
 export function DashboardShell({ hotel, children }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [newOrders, setNewOrders] = useState(0);
+
+  // Keep the latest pathname readable inside the realtime callback without
+  // resubscribing on every navigation.
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  // Clear the unread badge whenever the owner is looking at the Orders page.
+  useEffect(() => {
+    if (pathname === ORDERS_HREF) setNewOrders(0);
+  }, [pathname]);
+
+  // Global new-order notifications — fire on ANY dashboard page. The Orders page
+  // has its own live list + alert, so we stay quiet there to avoid double pings.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`dash-orders-${hotel.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "orders", filter: `hotel_id=eq.${hotel.id}` },
+        (payload) => {
+          if (pathnameRef.current === ORDERS_HREF) return;
+          const order = payload.new as Pick<Order, "table_number">;
+          setNewOrders((n) => n + 1);
+          playBeep();
+          toast.success(`New order${order.table_number ? ` · Table ${order.table_number}` : ""} 🛎️`, {
+            action: { label: "View", onClick: () => router.push(ORDERS_HREF) },
+          });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [hotel.id, supabase, router]);
 
   async function handleLogout() {
-    const supabase = createClient();
     await supabase.auth.signOut();
     toast.success("Logged out");
     router.push("/login");
@@ -72,6 +147,7 @@ export function DashboardShell({ hotel, children }: DashboardShellProps) {
           >
             <Icon size={18} />
             {label}
+            {href === ORDERS_HREF && <CountBadge count={newOrders} className="ml-auto" />}
           </Link>
         ))}
       </>
@@ -145,14 +221,24 @@ export function DashboardShell({ hotel, children }: DashboardShellProps) {
           </div>
           <span className="text-white font-bold text-base">MenuQR</span>
         </div>
-        <a
-          href={`/menu/${hotel.slug}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[#F97316] text-xs font-medium flex items-center gap-1 min-h-0 min-w-0 pr-1"
-        >
-          View menu <ExternalLink size={12} />
-        </a>
+        <div className="flex items-center gap-1">
+          <Link href={ORDERS_HREF} aria-label="Orders" className="relative text-white p-2 min-h-0 min-w-0">
+            <Bell size={18} />
+            {newOrders > 0 && (
+              <span className="absolute top-0 right-0 bg-[#EF4444] text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] px-0.5 flex items-center justify-center animate-pulse">
+                {newOrders > 9 ? "9+" : newOrders}
+              </span>
+            )}
+          </Link>
+          <a
+            href={`/menu/${hotel.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#F97316] text-xs font-medium flex items-center gap-1 min-h-0 min-w-0 pr-1"
+          >
+            View menu <ExternalLink size={12} />
+          </a>
+        </div>
       </div>
 
       {/* Mobile drawer */}
@@ -184,7 +270,14 @@ export function DashboardShell({ hotel, children }: DashboardShellProps) {
               isActive(href) ? "text-[#F97316]" : "text-[#9CA3AF]",
             ].join(" ")}
           >
-            <Icon size={20} />
+            <span className="relative">
+              <Icon size={20} />
+              {href === ORDERS_HREF && newOrders > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-[#EF4444] text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] px-0.5 flex items-center justify-center animate-pulse">
+                  {newOrders > 9 ? "9+" : newOrders}
+                </span>
+              )}
+            </span>
             <span className="text-[10px] font-medium">{label}</span>
           </Link>
         ))}

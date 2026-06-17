@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Bell } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
@@ -72,6 +72,14 @@ export function OrdersLive({ hotelId, initialOrders }: Props) {
               return next;
             });
           }, 10000);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders", filter: `hotel_id=eq.${hotelId}` },
+        (payload) => {
+          const updated = payload.new as Order;
+          setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
         }
       )
       .on(

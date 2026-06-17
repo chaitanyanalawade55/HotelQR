@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useMemo, ReactNode } from "react";
 import {
-  Plus, X, Check, Pencil, Trash2, ImagePlus, UtensilsCrossed, Loader2, Camera, Search, GripVertical,
+  Plus, X, Check, Pencil, Trash2, ImagePlus, UtensilsCrossed, Loader2, Camera, Search, GripVertical, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -11,6 +11,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, sortableKeyboardCoordinates, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/Button";
 import { Input, TextArea, Select } from "@/components/ui/Input";
 import { Toggle } from "@/components/ui/Toggle";
@@ -18,8 +19,29 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/compressImage";
-import { OCRScanner } from "./ocr-scanner";
 import type { Category, MenuItem } from "@/types/database";
+
+// Lazy-load OCR scanner — the Gemini SDK + Tesseract.js are heavy and only
+// needed when the user clicks "Scan menu card". This keeps the initial
+// dashboard menu bundle ~30KB lighter.
+const OCRScanner = dynamic(
+  () => import("./ocr-scanner").then((m) => m.OCRScanner),
+  { ssr: false, loading: () => <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center"><Loader2 size={32} className="animate-spin text-[#F97316]" /></div> }
+);
+
+// RFC4122 v4 — native crypto when available, with a fallback for insecure
+// contexts (e.g. opening the dev server over a LAN IP, where crypto.randomUUID
+// is undefined). Generating the id client-side lets the add be fully optimistic.
+function uuid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 interface Props {
   hotelId: string;
@@ -103,29 +125,46 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
     toast.success("Category deleted");
   }
 
+  // Optimistic add — opens the editor instantly, then inserts in the background.
   async function addItem() {
     if (!activeCatId) return;
-    const { data, error } = await supabase
-      .from("menu_items")
-      .insert({
-        hotel_id: hotelId,
-        category_id: activeCatId,
-        name: "New item",
-        price: 0,
-        food_type: "veg",
-        is_available: true,
-        sort_order: catItems.length,
-      })
-      .select()
-      .single();
+    const id = uuid();
+    const now = new Date().toISOString();
+    const optimistic: MenuItem = {
+      id,
+      hotel_id: hotelId,
+      category_id: activeCatId,
+      name: "New item",
+      description: null,
+      price: 0,
+      image_url: null,
+      food_type: "veg",
+      is_available: true,
+      sort_order: catItems.length,
+      badge: null,
+      is_special: false,
+      created_at: now,
+      updated_at: now,
+    };
+    setItems((prev) => [...prev, optimistic]);
+    editSnapshot.current = optimistic;
+    setEditingItemId(id);
+
+    const { error } = await supabase.from("menu_items").insert({
+      id,
+      hotel_id: hotelId,
+      category_id: activeCatId,
+      name: optimistic.name,
+      price: optimistic.price,
+      food_type: optimistic.food_type,
+      is_available: true,
+      sort_order: optimistic.sort_order,
+    });
     if (error) {
-      toast.error("Something went wrong");
-      return;
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      setEditingItemId((cur) => (cur === id ? null : cur));
+      toast.error("Could not add item");
     }
-    const created = data as unknown as MenuItem;
-    setItems((prev) => [...prev, created]);
-    editSnapshot.current = created;
-    setEditingItemId(created.id);
   }
 
   function startEdit(item: MenuItem) {
@@ -150,10 +189,10 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
     };
     let { error } = await supabase
       .from("menu_items")
-      .update({ ...base, badge: item.badge })
+      .update({ ...base, badge: item.badge, is_special: item.is_special })
       .eq("id", item.id);
-    // If the `badge` column hasn't been migrated yet, persist everything else.
-    if (error && (error.code === "42703" || /badge/i.test(error.message))) {
+    // If optional columns (badge/is_special) aren't migrated yet, persist the rest.
+    if (error && (error.code === "42703" || /badge|is_special/i.test(error.message))) {
       ({ error } = await supabase.from("menu_items").update(base).eq("id", item.id));
     }
     if (error) {
@@ -258,18 +297,13 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
   }
 
   return (
-    <div className="px-4 md:px-8 py-6">
+    <div className="px-4 md:px-8 py-6 pb-28 md:pb-12">
       <div className="flex items-center justify-between mb-5 gap-2">
         <h1 className="text-xl font-bold text-[#0F0E17]">Menu</h1>
         {activeCatId && (
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" icon={<Camera size={14} />} onClick={() => setShowOCR(true)}>
-              Scan menu card
-            </Button>
-            <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={addItem}>
-              Add item
-            </Button>
-          </div>
+          <Button variant="secondary" size="sm" icon={<Camera size={14} />} onClick={() => setShowOCR(true)}>
+            Scan menu card
+          </Button>
         )}
       </div>
 
@@ -482,6 +516,17 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
           }}
         />
       )}
+
+      {/* Centered, thumb-reachable add button */}
+      {activeCatId && editingItemId === null && (
+        <button
+          onClick={addItem}
+          aria-label="Add item"
+          className="fixed z-30 left-1/2 -translate-x-1/2 bottom-[72px] md:left-auto md:right-8 md:translate-x-0 md:bottom-8 flex items-center gap-2 bg-[#F97316] hover:bg-[#EA6C0A] active:scale-95 text-white font-semibold text-sm rounded-full pl-5 pr-6 py-3.5 shadow-lg shadow-black/25 transition-all"
+        >
+          <Plus size={20} /> Add item
+        </button>
+      )}
     </div>
   );
 }
@@ -555,6 +600,7 @@ function ViewItemCard({
           <div className="flex items-center gap-1.5">
             <VegIndicator type={item.food_type} />
             <span className="text-sm font-medium text-[#0F0E17] truncate">{item.name}</span>
+            {item.is_special && <Star size={12} className="text-[#F97316] fill-[#F97316] flex-shrink-0" />}
             {item.badge && (
               <span className="text-[10px] font-semibold text-[#F97316] bg-[#FFF7ED] border border-[#FED7AA] px-1.5 py-0.5 rounded-full flex-shrink-0">
                 {item.badge}
@@ -669,7 +715,16 @@ function EditItemCard({
         placeholder="Badge (optional) — e.g. Bestseller, Chef's Pick, New"
       />
 
-      {/* Row 5: actions */}
+      {/* Row 5: speciality */}
+      <div className="flex items-center justify-between bg-[#FFF7ED] border border-[#FED7AA] rounded-2xl px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Star size={15} className="text-[#F97316] fill-[#F97316]" />
+          <span className="text-sm text-[#7C3A00]">Speciality — show first on the menu</span>
+        </div>
+        <Toggle checked={item.is_special ?? false} onChange={(v) => onUpdate({ is_special: v })} size="sm" />
+      </div>
+
+      {/* Row 6: actions */}
       <div className="flex items-center gap-2">
         <Button variant="primary" size="sm" icon={<Check size={14} />} onClick={onSave}>
           Save

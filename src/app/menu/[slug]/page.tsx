@@ -81,19 +81,19 @@ export default async function PublicMenuPage({ params }: PageProps) {
       .order("sort_order"),
     supabase
       .from("menu_items")
-      .select(`${ITEM_COLS},badge`)
+      .select(`${ITEM_COLS},badge,is_special`)
       .eq("hotel_id", hotel.id)
       .eq("is_available", true)
       .order("sort_order"),
     supabase
       .from("hotel_settings")
-      .select("logo_url,theme_color,currency")
+      .select("logo_url,theme_color,currency,order_cancel_minutes")
       .eq("hotel_id", hotel.id)
       .single(),
   ]);
 
-  // Gracefully degrade if the optional `badge` column hasn't been migrated yet —
-  // the menu still renders, just without badges.
+  // Gracefully degrade if optional columns haven't been migrated yet — the menu
+  // still renders, just without badges / specials / a custom cancel window.
   let items: unknown = itemsRes.data;
   if (itemsRes.error) {
     const retry = await supabase
@@ -105,10 +105,20 @@ export default async function PublicMenuPage({ params }: PageProps) {
     items = retry.data;
   }
 
+  let settings: unknown = settingsRes.data;
+  if (settingsRes.error) {
+    const retry = await supabase
+      .from("hotel_settings")
+      .select("logo_url,theme_color,currency")
+      .eq("hotel_id", hotel.id)
+      .single();
+    settings = retry.data;
+  }
+
   return (
     <PublicMenu
       hotel={hotel as unknown as Hotel}
-      settings={(settingsRes.data as unknown as HotelSettings) ?? null}
+      settings={(settings as unknown as HotelSettings) ?? null}
       categories={(categoriesRes.data as unknown as Category[]) ?? []}
       items={(items as unknown as MenuItem[]) ?? []}
       tableSlug={slug}

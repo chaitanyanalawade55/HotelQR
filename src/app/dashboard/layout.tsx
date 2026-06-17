@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "./shell";
 import type { Hotel } from "@/types/database";
 
+// Only select the columns the shell actually uses — not SELECT *
+const HOTEL_COLS = "id,name,slug,owner_id,status,address,phone,owner_email";
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -20,7 +23,7 @@ export default async function DashboardLayout({
 
   const { data: hotel } = await supabase
     .from("hotels")
-    .select("*")
+    .select(HOTEL_COLS)
     .eq("owner_id", user.id)
     .single();
 

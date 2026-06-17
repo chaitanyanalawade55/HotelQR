@@ -37,6 +37,7 @@ interface Props {
 export function BrandingForm({ hotel, initialSettings }: Props) {
   const [themeColor, setThemeColor] = useState(initialSettings?.theme_color ?? "#F97316");
   const [currency, setCurrency] = useState(initialSettings?.currency ?? "INR");
+  const [cancelMinutes, setCancelMinutes] = useState(initialSettings?.order_cancel_minutes ?? 5);
   const [logoUrl, setLogoUrl] = useState(initialSettings?.logo_url ?? null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -74,10 +75,14 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
 
   async function handleSave() {
     setSaving(true);
-    const payload = { hotel_id: hotel.id, theme_color: themeColor, currency, logo_url: logoUrl };
-    const { error } = await supabase
+    const base = { hotel_id: hotel.id, theme_color: themeColor, currency, logo_url: logoUrl };
+    let { error } = await supabase
       .from("hotel_settings")
-      .upsert(payload, { onConflict: "hotel_id" });
+      .upsert({ ...base, order_cancel_minutes: cancelMinutes }, { onConflict: "hotel_id" });
+    // Fall back if the order_cancel_minutes column hasn't been migrated yet.
+    if (error && (error.code === "42703" || /order_cancel_minutes/i.test(error.message))) {
+      ({ error } = await supabase.from("hotel_settings").upsert(base, { onConflict: "hotel_id" }));
+    }
     setSaving(false);
     if (error) { toast.error("Something went wrong."); return; }
     toast.success("Branding saved!");
@@ -154,6 +159,25 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
             <option key={value} value={value}>{label}</option>
           ))}
         </Select>
+      </Card>
+
+      {/* Order cancellation window */}
+      <Card padding="lg">
+        <p className="text-sm font-semibold text-[#0F0E17] mb-1">Order cancellation window</p>
+        <p className="text-xs text-[#6B7280] mb-3">How long customers can cancel an order after placing it.</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            min={0}
+            max={60}
+            value={cancelMinutes}
+            onChange={(e) => setCancelMinutes(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
+            className="w-20 border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#0F0E17] focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
+          />
+          <span className="text-sm text-[#374151]">
+            minutes <span className="text-[#9CA3AF]">(0 disables cancellation)</span>
+          </span>
+        </div>
       </Card>
 
       {/* Live preview */}

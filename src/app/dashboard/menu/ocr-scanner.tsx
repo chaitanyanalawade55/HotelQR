@@ -1,9 +1,10 @@
 "use client";
-import { useState, useRef } from "react";
-import { Camera, X, Loader2, Plus, Trash2, Sparkles } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Camera, X, Loader2, Plus, Trash2, Sparkles, Zap, Cpu } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { runOCR, extractMenuItems, type OCRProvider, type ExtractedMenuItem } from "@/lib/ocr";
 import type { MenuItem } from "@/types/database";
 
 type FoodType = "veg" | "non_veg" | "egg" | "vegan";
@@ -19,6 +20,19 @@ interface Props {
   onAdded: (items: MenuItem[]) => void;
 }
 
+/** Provider metadata for the dropdown UI. */
+const PROVIDERS: { id: OCRProvider; label: string; icon: typeof Sparkles; desc: string; needsKey: boolean }[] = [
+  { id: "gemini",    label: "Gemini AI ✨",     icon: Sparkles, desc: "Fastest & most accurate — free tier",     needsKey: true },
+  { id: "ocrspace",  label: "OCR.space",        icon: Zap,      desc: "Fast cloud OCR — no sign-up",            needsKey: false },
+  { id: "tesseract", label: "Offline (device)",  icon: Cpu,      desc: "Runs on your device — slower",           needsKey: false },
+];
+
+const GEMINI_KEY_STORAGE = "gemini_api_key";
+
+/**
+ * Regex-based parser for raw OCR text (used by OCR.space & Tesseract fallback).
+ * Gemini uses its own structured JSON extraction and bypasses this entirely.
+ */
 function parseMenuText(rawText: string): ParsedItem[] {
   const lines = rawText.split("\n").map((l) => l.trim()).filter(Boolean);
   const items: ParsedItem[] = [];
@@ -46,48 +60,32 @@ function parseMenuText(rawText: string): ParsedItem[] {
   return items;
 }
 
-// Tesseract.js — dynamically imported so it never lands in the main bundle.
-async function runTesseract(imageFile: File, onProgress: (p: number) => void): Promise<string> {
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng", 1, {
-    logger: (m: { status: string; progress: number }) => {
-      if (m.status === "recognizing text") onProgress(m.progress);
-    },
-  });
-  const {
-    data: { text },
-  } = await worker.recognize(imageFile);
-  await worker.terminate();
-  return text;
-}
-
-async function runVisionOCR(imageFile: File, apiKey: string): Promise<string> {
-  const base64 = await new Promise<string>((res, rej) => {
-    const reader = new FileReader();
-    reader.onload = () => res((reader.result as string).split(",")[1]);
-    reader.onerror = rej;
-    reader.readAsDataURL(imageFile);
-  });
-  const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      requests: [{ image: { content: base64 }, features: [{ type: "TEXT_DETECTION", maxResults: 1 }] }],
-    }),
-  });
-  const data = await response.json();
-  return data.responses?.[0]?.fullTextAnnotation?.text ?? "";
+/** Convert ExtractedMenuItem[] (from Gemini) to ParsedItem[] for the review UI. */
+function toParsedItems(extracted: ExtractedMenuItem[]): ParsedItem[] {
+  return extracted.map((item) => ({
+    name: item.name,
+    price: item.price,
+    description: item.description,
+    food_type: item.food_type,
+    selected: true,
+  }));
 }
 
 export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCount, onClose, onAdded }: Props) {
   const [step, setStep] = useState<Step>("upload");
   const [progress, setProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const [useVision, setUseVision] = useState(false);
+  const [provider, setProvider] = useState<OCRProvider>("tesseract");
   const [parsed, setParsed] = useState<ParsedItem[]>([]);
   const [saving, setSaving] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+
+  // Auto-select Gemini if a key exists.
+  useEffect(() => {
+    const key = typeof window !== "undefined" ? localStorage.getItem(GEMINI_KEY_STORAGE) : null;
+    if (key) setProvider("gemini");
+  }, []);
 
   async function handleImage(file: File) {
     if (!file.type.startsWith("image/")) {
@@ -96,22 +94,40 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
     }
     setStep("processing");
     setProgress(0);
+
     try {
-      let text: string;
-      const apiKey = typeof window !== "undefined" ? localStorage.getItem("vision_api_key") : null;
-      if (useVision && apiKey) {
-        text = await runVisionOCR(file, apiKey);
-      } else {
-        if (useVision && !apiKey) toast("No Vision API key set — using offline OCR");
-        text = await runTesseract(file, setProgress);
+      const apiKey = typeof window !== "undefined" ? localStorage.getItem(GEMINI_KEY_STORAGE) : null;
+
+      // Warn if Gemini selected but no key, fall back to tesseract.
+      let activeProvider = provider;
+      if (provider === "gemini" && !apiKey) {
+        toast("No Gemini API key set — falling back to offline OCR");
+        activeProvider = "tesseract";
       }
-      const result = parseMenuText(text);
-      if (result.length === 0) {
-        toast.error("Could not read menu. Try a clearer photo.");
+
+      let items: ParsedItem[];
+
+      if (activeProvider === "gemini" && apiKey) {
+        // ⚡ FAST PATH: Gemini structured extraction — returns parsed items directly.
+        // No regex, no post-processing. AI understands the menu layout natively.
+        const result = await extractMenuItems(file, apiKey);
+        items = toParsedItems(result.items);
+      } else {
+        // FALLBACK: OCR.space / Tesseract → raw text → regex parsing.
+        const result = await runOCR(file, activeProvider, {
+          apiKey,
+          onProgress: setProgress,
+        });
+        items = parseMenuText(result.text);
+      }
+
+      if (items.length === 0) {
+        toast.error("Could not read menu items. Try a clearer photo.");
         setStep("upload");
         return;
       }
-      setParsed(result);
+
+      setParsed(items);
       setStep("review");
     } catch (err) {
       console.error(err);
@@ -166,6 +182,8 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
     onClose();
   }
 
+  const showProgressBar = provider === "tesseract";
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
       {step === "upload" && (
@@ -209,11 +227,45 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
             onChange={onFileChange}
           />
 
-          <label className="flex items-center gap-2 mt-4 text-xs text-[#6B7280] cursor-pointer select-none">
-            <input type="checkbox" checked={useVision} onChange={(e) => setUseVision(e.target.checked)} />
-            <Sparkles size={13} className="text-[#F97316]" />
-            Use AI OCR (Google Vision) — needs API key in Settings
-          </label>
+          {/* ── OCR Provider Selector ── */}
+          <div className="mt-4 space-y-1.5">
+            <p className="text-xs font-medium text-[#374151]">OCR Engine</p>
+            {PROVIDERS.map((p) => {
+              const Icon = p.icon;
+              const active = provider === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setProvider(p.id)}
+                  className={[
+                    "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-all border",
+                    active
+                      ? "border-[#F97316] bg-[#FFF7ED] ring-1 ring-[#F97316]/30"
+                      : "border-[#E5E7EB] hover:border-[#D1D5DB]",
+                  ].join(" ")}
+                >
+                  <Icon size={14} className={active ? "text-[#F97316]" : "text-[#9CA3AF]"} />
+                  <div className="flex-1 min-w-0">
+                    <span className={["text-xs font-medium", active ? "text-[#0F0E17]" : "text-[#374151]"].join(" ")}>
+                      {p.label}
+                    </span>
+                    <p className="text-[10px] text-[#9CA3AF] leading-tight">{p.desc}</p>
+                  </div>
+                  <div
+                    className={[
+                      "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                      active ? "border-[#F97316]" : "border-[#D1D5DB]",
+                    ].join(" ")}
+                  >
+                    {active && <div className="w-2 h-2 rounded-full bg-[#F97316]" />}
+                  </div>
+                </button>
+              );
+            })}
+            {provider === "gemini" && !localStorage.getItem(GEMINI_KEY_STORAGE) && (
+              <p className="text-[10px] text-[#EF4444] pl-1">⚠ Add your Gemini API key in Settings first</p>
+            )}
+          </div>
 
           <button onClick={onClose} className="text-[#6B7280] text-sm mt-4 w-full text-center min-h-0">
             Cancel
@@ -224,14 +276,27 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
       {step === "processing" && (
         <div className="bg-white rounded-3xl p-6 max-w-sm w-full mx-4 flex flex-col items-center">
           <Loader2 size={32} className="animate-spin text-[#F97316] mb-3" />
-          <p className="text-sm text-[#6B7280]">Reading your menu...</p>
-          <div className="w-full bg-[#F3F4F6] rounded-full h-2 mt-4">
-            <div
-              className="bg-[#F97316] h-2 rounded-full transition-all"
-              style={{ width: `${Math.round(progress * 100)}%` }}
-            />
-          </div>
-          <p className="text-xs text-[#9CA3AF] mt-2">This takes 10-20 seconds</p>
+          <p className="text-sm font-medium text-[#0F0E17]">
+            {provider === "gemini" ? "AI is reading your menu..." : "Reading your menu..."}
+          </p>
+          {showProgressBar && (
+            <>
+              <div className="w-full bg-[#F3F4F6] rounded-full h-2 mt-4">
+                <div
+                  className="bg-[#F97316] h-2 rounded-full transition-all"
+                  style={{ width: `${Math.round(progress * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-[#9CA3AF] mt-2">This takes 10-20 seconds</p>
+            </>
+          )}
+          {!showProgressBar && (
+            <p className="text-xs text-[#9CA3AF] mt-2">
+              {provider === "gemini"
+                ? "Extracting items, prices & food types — usually 2-4 seconds"
+                : "Usually takes 1-3 seconds"}
+            </p>
+          )}
         </div>
       )}
 
