@@ -42,8 +42,18 @@ export type MenuItem = {
   food_type: "veg" | "non_veg" | "egg" | "vegan";
   is_available: boolean;
   sort_order: number;
+  badge: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ItemRating = {
+  id: string;
+  item_id: string;
+  hotel_id: string;
+  rating: number;
+  table_slug: string | null;
+  created_at: string;
 };
 
 export type TableQR = {

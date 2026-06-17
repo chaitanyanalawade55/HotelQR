@@ -12,16 +12,29 @@ A SaaS platform where hotels and restaurants replace printed menus with a brande
 | Language | TypeScript |
 | Forms | React Hook Form + Zod |
 | Notifications | Sonner |
-| QR Generation | qrcode |
+| QR Generation | qrcode (dynamically imported) |
+| OCR | Tesseract.js (offline) or Google Vision (optional) |
+| Drag & drop | dnd-kit |
 
 ## Features
 
 - **Auth** — Sign up / log in with Supabase Auth
-- **Menu Management** — Add categories and items (name, price, description, image, veg/non-veg indicator)
-- **Branding** — Upload logo, pick theme color, set currency
-- **QR Codes** — Generate and download PNG/SVG QR codes for the main menu and per-table
-- **Live Orders** — Realtime order tracking with Supabase Realtime (new/preparing/done)
-- **Public Menu** — Beautiful customer-facing menu at `/menu/[slug]` with search, filters, cart, and waiter call button
+- **Menu Management** — Categories and items (name, price, description, image, veg/non-veg, optional badge), in-page search, bulk availability toggle, and drag-to-reorder
+- **Scan menu card (OCR)** — Photograph an existing printed menu and bulk-import the dishes. Uses Tesseract.js offline by default; add a Google Vision API key in **Settings** for higher accuracy
+- **Image compression** — Photos are downscaled to WebP in the browser before upload (a 4MB photo becomes ~120KB)
+- **Branding** — Upload logo, pick theme color, set currency, live preview
+- **QR Codes** — Download PNG/SVG QR codes for the main menu and per-table, plus a one-tap WhatsApp share link
+- **Live Orders** — Realtime order tracking with Supabase Realtime (new/preparing/done) + sound alert
+- **Public Menu** — Statically generated (ISR), customer-facing menu at `/menu/[slug]` with instant in-memory search/filters, item badges, star ratings (long-press to rate), cart, and waiter call button
+
+## Performance
+
+- The public menu is **statically pre-rendered** (`generateStaticParams` + `revalidate = 60`) so a QR scan loads cached HTML.
+- All images use `next/image` (AVIF/WebP, lazy loading, blur placeholder).
+- Search/filtering runs entirely client-side in `useMemo` — zero network calls after load.
+- Server queries run in parallel (`Promise.all`) and select only the columns rendered.
+- Heavy libraries (`tesseract.js`, `qrcode`) are dynamically imported and kept out of the main bundle.
+- Optimistic UI on availability toggles and item saves.
 
 ## Prerequisites
 
@@ -145,6 +158,12 @@ create table waiter_calls (
 );
 ```
 
+> **Row Level Security:** after creating the tables, also run the RLS policies (owners manage their own hotel's data; the public can read menus and insert orders/waiter calls/ratings). See the policies in `supabase/migrations/` and your Supabase dashboard.
+
+### 4b. Run the upgrade migration
+
+Run [`supabase/migrations/0002_upgrade_ocr_features.sql`](supabase/migrations/0002_upgrade_ocr_features.sql) in the **SQL Editor**. It adds the `badge` column to `menu_items`, the `item_ratings` table (with RLS), and a slug index. It is safe to re-run.
+
 ### 5. Set up Supabase Storage
 
 In your Supabase project go to **Storage** and create two public buckets:
@@ -170,23 +189,32 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 src/
 ├── app/
 │   ├── (auth)/
+│   │   ├── layout.tsx          # Dark background for auth screens
 │   │   ├── login/page.tsx
 │   │   └── signup/page.tsx
 │   ├── dashboard/
 │   │   ├── layout.tsx          # Auth check + hotel fetch
 │   │   ├── shell.tsx           # Sidebar + mobile bottom nav
+│   │   ├── loading.tsx         # Skeleton screen
 │   │   ├── page.tsx            # Home / stats
-│   │   ├── menu/               # Menu CRUD
+│   │   ├── menu/               # Menu CRUD + OCR scanner (ocr-scanner.tsx)
 │   │   ├── branding/           # Logo, theme color, currency
-│   │   ├── qr/                 # QR code generation
-│   │   └── orders/             # Live orders (Realtime)
-│   ├── menu/[slug]/            # Public customer-facing menu
-│   ├── layout.tsx              # Root layout + Toaster
+│   │   ├── qr/                 # QR code generation + WhatsApp share
+│   │   ├── orders/             # Live orders (Realtime)
+│   │   └── settings/           # Google Vision API key
+│   ├── menu/[slug]/            # Public menu (SSG) + loading + not-found
+│   ├── layout.tsx              # Root layout, viewport, font preload
 │   └── globals.css
 ├── components/ui/              # Button, Input, Card, Toggle, Badge, etc.
-├── lib/supabase/               # Browser + server Supabase clients
+├── lib/
+│   ├── supabase/               # Browser, server, and static (cookie-less) clients
+│   └── compressImage.ts        # Client-side image → WebP compression
 ├── middleware.ts               # Session refresh + route protection
 └── types/database.ts           # TypeScript types for all tables
+
+supabase/
+├── functions/get-menu/         # Optional edge function (not used by default)
+└── migrations/                 # SQL migrations
 ```
 
 ## Environment Variables Reference
@@ -195,7 +223,21 @@ src/
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
-| `NEXT_PUBLIC_SITE_URL` | The base URL of your app (e.g. `http://localhost:3000`) |
+| `NEXT_PUBLIC_SITE_URL` | The base URL of your app (used in QR links — e.g. `http://localhost:3000`) |
+
+> The optional Google Vision API key is **not** an env var — it's entered in the dashboard under **Settings** and stored in the browser.
+
+## Deployment
+
+This app uses server-side rendering (SSR auth, middleware, ISR), so it needs a Node host such as **Vercel** — `import` the repo, set the three environment variables above (with `NEXT_PUBLIC_SITE_URL` set to your production URL), and deploy.
+
+> Note: static hosting (e.g. GitHub Pages / `next export`) is **not** compatible with this build because of the authenticated dashboard, middleware, and ISR.
+
+## Analyzing the bundle
+
+```bash
+ANALYZE=true yarn build
+```
 
 ## License
 

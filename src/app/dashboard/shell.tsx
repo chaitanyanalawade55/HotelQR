@@ -8,6 +8,7 @@ import {
   QrCode,
   LogOut,
   ShoppingBag,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/dashboard/branding", label: "Branding", icon: Palette },
   { href: "/dashboard/qr", label: "QR", icon: QrCode },
   { href: "/dashboard/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export function DashboardShell({ hotel, children }: DashboardShellProps) {
@@ -43,10 +45,9 @@ export function DashboardShell({ hotel, children }: DashboardShellProps) {
     return pathname.startsWith(href);
   }
 
-  const menuUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/menu/${hotel.slug}`
-      : `/menu/${hotel.slug}`;
+  const menuUrl = process.env.NEXT_PUBLIC_SITE_URL
+    ? `${process.env.NEXT_PUBLIC_SITE_URL}/menu/${hotel.slug}`
+    : `/menu/${hotel.slug}`;
 
   return (
     <div className="min-h-screen">

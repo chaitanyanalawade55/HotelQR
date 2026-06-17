@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Input";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { createClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/compressImage";
 import type { Hotel, HotelSettings } from "@/types/database";
 
 const SWATCHES = [
@@ -45,11 +46,21 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { toast.error("Image must be under 2MB"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Image must be under 10MB"); return; }
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `${hotel.id}/logo.${ext}`;
-    const { error } = await supabase.storage.from("hotel-logos").upload(path, file, { upsert: true });
+    toast.info("Optimising image...");
+    let blob: Blob;
+    try {
+      blob = await compressImage(file, 400, 0.85);
+    } catch {
+      toast.error("Could not process image");
+      setUploading(false);
+      return;
+    }
+    const path = `${hotel.id}/logo.webp`;
+    const { error } = await supabase.storage
+      .from("hotel-logos")
+      .upload(path, blob, { upsert: true, contentType: "image/webp" });
     if (error) { toast.error("Image upload failed. Try again."); setUploading(false); return; }
     const { data: urlData } = supabase.storage.from("hotel-logos").getPublicUrl(path);
     setLogoUrl(`${urlData.publicUrl}?t=${Date.now()}`);
