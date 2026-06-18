@@ -41,7 +41,7 @@ type ActiveOrder = {
   total: number;
   table: string;
   cancelMinutes: number;
-  status: "new" | "cancelled";
+  status: "new" | "preparing" | "completed" | "cancelled";
 };
 
 function matchesFilters(item: MenuItem, q: string, foodFilter: FoodFilter) {
