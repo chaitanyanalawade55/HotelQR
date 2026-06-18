@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { MenuLinkActions } from "./menu-link-actions";
 
 // Only select the columns we render on this page.
 const HOTEL_COLS = "id,name,slug,owner_id,status";
@@ -71,6 +72,8 @@ export default async function DashboardPage() {
   const doneCount = steps.length - remaining.length;
   const showChecklist = remaining.length > 0;
   const pct = Math.round((doneCount / steps.length) * 100);
+
+  const menuUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/menu/${hotel.slug}`;
 
   const quickTiles = [
     { icon: UtensilsCrossed, label: "Menu", href: "/dashboard/menu" },
@@ -143,17 +146,18 @@ export default async function DashboardPage() {
 
       <div className="bg-[#1C1C2E] rounded-3xl p-5 mt-4">
         <p className="text-[10px] uppercase tracking-widest text-[#6B7280] mb-1">Your menu link</p>
-        <p className="text-sm font-medium text-white break-all mb-3">
-          {process.env.NEXT_PUBLIC_SITE_URL}/menu/{hotel.slug}
-        </p>
-        <a
-          href={`/menu/${hotel.slug}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="bg-[#F97316] text-white rounded-2xl px-4 py-2.5 text-sm font-medium inline-flex items-center gap-2 min-h-0"
-        >
-          Preview your menu <ExternalLink size={14} />
-        </a>
+        <p className="text-sm font-medium text-white break-all mb-3">{menuUrl}</p>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={`/menu/${hotel.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-[#F97316] text-white rounded-2xl px-4 py-2.5 text-sm font-medium inline-flex items-center gap-2 min-h-0"
+          >
+            <ExternalLink size={14} /> Preview
+          </a>
+          <MenuLinkActions url={menuUrl} name={hotel.name} />
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mt-4">
