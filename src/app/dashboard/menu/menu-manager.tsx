@@ -130,6 +130,9 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
     if (!activeCatId) return;
     const id = uuid();
     const now = new Date().toISOString();
+    // Place the new item at the TOP of the list so its editor is right there.
+    const minOrder = catItems.length ? Math.min(...catItems.map((i) => i.sort_order)) : 0;
+    const newOrder = minOrder - 1;
     const optimistic: MenuItem = {
       id,
       hotel_id: hotelId,
@@ -140,7 +143,7 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
       image_url: null,
       food_type: "veg",
       is_available: true,
-      sort_order: catItems.length,
+      sort_order: newOrder,
       badge: null,
       is_special: false,
       created_at: now,
@@ -149,6 +152,8 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
     setItems((prev) => [...prev, optimistic]);
     editSnapshot.current = optimistic;
     setEditingItemId(id);
+    // Scroll up so the editor (now at the top of the list) is visible.
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
 
     const { error } = await supabase.from("menu_items").insert({
       id,
@@ -158,7 +163,7 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
       price: optimistic.price,
       food_type: optimistic.food_type,
       is_available: true,
-      sort_order: optimistic.sort_order,
+      sort_order: newOrder,
     });
     if (error) {
       setItems((prev) => prev.filter((i) => i.id !== id));
@@ -334,13 +339,15 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
             )}
           </button>
         ))}
-        <button
-          onClick={() => setShowAddCat(true)}
-          className="flex items-center px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap shrink-0 bg-[#FFF7ED] text-[#F97316] border border-[#FED7AA]"
-        >
-          <Plus size={12} className="mr-1" /> Add
-        </button>
       </div>
+
+      {/* Add category — on its own line so it never scrolls off-screen */}
+      <button
+        onClick={() => setShowAddCat(true)}
+        className="flex items-center w-fit px-4 py-2 mt-1 rounded-full text-sm font-medium bg-[#FFF7ED] text-[#F97316] border border-[#FED7AA]"
+      >
+        <Plus size={12} className="mr-1" /> Add category
+      </button>
 
       {/* Add category input */}
       {showAddCat && (
