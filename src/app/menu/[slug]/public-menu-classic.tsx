@@ -239,7 +239,7 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   // the manager sees the SAME order grow (a realtime UPDATE) rather than a
   // second row. Returns false if there's no open order to append to.
   async function appendToActiveOrder(): Promise<boolean> {
-    if (!activeOrder || activeOrder.status !== "new") return false;
+    if (!activeOrder || (activeOrder.status !== "new" && activeOrder.status !== "preparing")) return false;
     const newItems = cart.map((c) => ({ item_id: c.itemId, name: c.name, price: c.price, qty: c.qty }));
     const { data, error } = await supabase.rpc("append_to_order", {
       p_order_id: activeOrder.id,
@@ -572,7 +572,6 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
               <p className="text-white text-sm font-medium">
                 {cartCount} item{cartCount !== 1 ? "s" : ""}
               </p>
-              <p className="text-white/80 text-xs">₹{cartTotal}</p>
             </div>
             <span className="text-white font-semibold text-sm">View order →</span>
           </button>
@@ -847,28 +846,22 @@ const CartSheet = memo(function CartSheet({
                     <Plus size={14} />
                   </button>
                 </div>
-                <span className="text-sm font-semibold text-[#0F0E17] w-14 text-right">₹{c.price * c.qty}</span>
               </div>
             ))}
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-4 mb-3">
-          <span className="text-sm text-[#6B7280]">Total</span>
-          <span className="text-lg font-bold text-[#0F0E17]">₹{total}</span>
-        </div>
-
         <button
           onClick={onPlaceOrder}
           disabled={placing || cart.length === 0}
-          className="w-full rounded-2xl py-3.5 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
+          className="w-full mt-4 rounded-2xl py-3.5 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
           style={{ backgroundColor: themeColor }}
         >
           {placing
             ? appendMode
               ? "Adding..."
               : "Placing order..."
-            : `${appendMode ? "Add to order" : "Place order"} · ₹${total}`}
+            : `${appendMode ? "Add to order" : "Place order"}`}
         </button>
       </div>
     </div>
@@ -974,19 +967,13 @@ function OrderStatus({
         {/* Items */}
         <div className="bg-white rounded-3xl border border-[#E5E7EB] p-4">
           {order.items.map((c) => (
-            <div key={c.itemId} className="flex justify-between text-sm py-1.5">
+            <div key={c.itemId} className="flex justify-between text-sm py-2 border-b border-[#E5E7EB] last:border-0">
               <span className="text-[#374151]">
-                {c.name} × {c.qty}
+                {c.name}
               </span>
-              <span className="text-[#6B7280]">₹{c.price * c.qty}</span>
+              <span className="text-[#6B7280]">× {c.qty}</span>
             </div>
           ))}
-          <div className="flex justify-between border-t border-[#E5E7EB] mt-2 pt-3">
-            <span className="text-sm font-semibold text-[#0F0E17]">Total</span>
-            <span className="text-sm font-bold" style={{ color: themeColor }}>
-              ₹{order.total}
-            </span>
-          </div>
         </div>
 
         {/* Cancellation window */}
