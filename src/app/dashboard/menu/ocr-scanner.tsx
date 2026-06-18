@@ -20,14 +20,24 @@ interface Props {
   onAdded: (items: MenuItem[]) => void;
 }
 
-/** Provider metadata for the dropdown UI. */
-const PROVIDERS: { id: OCRProvider; label: string; icon: typeof Sparkles; desc: string; needsKey: boolean }[] = [
-  { id: "gemini",    label: "Gemini AI ✨",     icon: Sparkles, desc: "Fastest & most accurate — free tier",     needsKey: true },
-  { id: "ocrspace",  label: "OCR.space",        icon: Zap,      desc: "Fast cloud OCR — no sign-up",            needsKey: false },
-  { id: "tesseract", label: "Offline (device)",  icon: Cpu,      desc: "Runs on your device — slower",           needsKey: false },
-];
+/** Resolve the Gemini API key — env variable first, then localStorage fallback. */
+function getGeminiKey(): string | null {
+  // 1. Vercel env variable (set via dashboard or CLI) — works for all users automatically.
+  const envKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  if (envKey) return envKey;
+  // 2. Per-browser localStorage key (legacy — from Settings page).
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("gemini_api_key") ?? null;
+  }
+  return null;
+}
 
-const GEMINI_KEY_STORAGE = "gemini_api_key";
+/** Provider metadata for the dropdown UI. */
+const PROVIDERS: { id: OCRProvider; label: string; icon: typeof Sparkles; desc: string }[] = [
+  { id: "gemini",    label: "Gemini AI",          icon: Sparkles, desc: "Fastest & most accurate — AI powered" },
+  { id: "ocrspace",  label: "OCR.space",          icon: Zap,      desc: "Fast cloud OCR — no sign-up" },
+  { id: "tesseract", label: "Offline (device)",    icon: Cpu,      desc: "Runs on your device — slower" },
+];
 
 /**
  * Regex-based parser for raw OCR text (used by OCR.space & Tesseract fallback).
@@ -81,10 +91,9 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
   const fileInput = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
-  // Auto-select Gemini if a key exists.
+  // Auto-select Gemini if an API key is available (env or localStorage).
   useEffect(() => {
-    const key = typeof window !== "undefined" ? localStorage.getItem(GEMINI_KEY_STORAGE) : null;
-    if (key) setProvider("gemini");
+    if (getGeminiKey()) setProvider("gemini");
   }, []);
 
   async function handleImage(file: File) {
@@ -96,20 +105,19 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
     setProgress(0);
 
     try {
-      const apiKey = typeof window !== "undefined" ? localStorage.getItem(GEMINI_KEY_STORAGE) : null;
+      const apiKey = getGeminiKey();
 
       // Warn if Gemini selected but no key, fall back to tesseract.
       let activeProvider = provider;
       if (provider === "gemini" && !apiKey) {
-        toast("No Gemini API key set — falling back to offline OCR");
+        toast("No Gemini API key — falling back to offline OCR");
         activeProvider = "tesseract";
       }
 
       let items: ParsedItem[];
 
       if (activeProvider === "gemini" && apiKey) {
-        // ⚡ FAST PATH: Gemini structured extraction — returns parsed items directly.
-        // No regex, no post-processing. AI understands the menu layout natively.
+        // FAST PATH: Gemini structured extraction — returns parsed items directly.
         const result = await extractMenuItems(file, apiKey);
         items = toParsedItems(result.items);
       } else {
@@ -183,6 +191,7 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
   }
 
   const showProgressBar = provider === "tesseract";
+  const geminiReady = !!getGeminiKey();
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -195,6 +204,13 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
             </button>
           </div>
           <p className="text-sm text-[#6B7280] mb-4">Take a photo or upload an image of your existing menu</p>
+
+          {/* Gemini status badge */}
+          {geminiReady && (
+            <div className="flex items-center gap-1.5 bg-[#F0FDF4] text-[#166534] text-xs font-medium px-3 py-1.5 rounded-full mb-3 w-fit">
+              <Sparkles size={12} /> Gemini AI enabled — auto-extract in 2-4 sec
+            </div>
+          )}
 
           <button
             type="button"
@@ -227,7 +243,7 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
             onChange={onFileChange}
           />
 
-          {/* ── OCR Provider Selector ── */}
+          {/* OCR Provider Selector */}
           <div className="mt-4 space-y-1.5">
             <p className="text-xs font-medium text-[#374151]">OCR Engine</p>
             {PROVIDERS.map((p) => {
@@ -262,8 +278,8 @@ export function OCRScanner({ hotelId, categoryId, categoryName, existingItemCoun
                 </button>
               );
             })}
-            {provider === "gemini" && !localStorage.getItem(GEMINI_KEY_STORAGE) && (
-              <p className="text-[10px] text-[#EF4444] pl-1">⚠ Add your Gemini API key in Settings first</p>
+            {provider === "gemini" && !geminiReady && (
+              <p className="text-[10px] text-[#EF4444] pl-1">No Gemini API key found. Add NEXT_PUBLIC_GEMINI_API_KEY in Vercel env variables.</p>
             )}
           </div>
 

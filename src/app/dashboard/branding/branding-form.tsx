@@ -38,6 +38,7 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
   const [themeColor, setThemeColor] = useState(initialSettings?.theme_color ?? "#F97316");
   const [currency, setCurrency] = useState(initialSettings?.currency ?? "INR");
   const [cancelMinutes, setCancelMinutes] = useState(initialSettings?.order_cancel_minutes ?? 5);
+  const [menuLayout, setMenuLayout] = useState<"classic" | "modern">(initialSettings?.menu_layout ?? "classic");
   const [logoUrl, setLogoUrl] = useState(initialSettings?.logo_url ?? null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -75,7 +76,7 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
 
   async function handleSave() {
     setSaving(true);
-    const base = { hotel_id: hotel.id, theme_color: themeColor, currency, logo_url: logoUrl };
+    const base = { hotel_id: hotel.id, theme_color: themeColor, currency, logo_url: logoUrl, menu_layout: menuLayout };
     let { error } = await supabase
       .from("hotel_settings")
       .upsert({ ...base, order_cancel_minutes: cancelMinutes }, { onConflict: "hotel_id" });
@@ -159,6 +160,33 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
             <option key={value} value={value}>{label}</option>
           ))}
         </Select>
+      </Card>
+
+      {/* Menu layout card */}
+      <Card padding="lg">
+        <p className="text-sm font-semibold text-[#0F0E17] mb-1">Menu Layout</p>
+        <p className="text-xs text-[#6B7280] mb-3">Choose the design for your customer-facing menu.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setMenuLayout("classic")}
+            className={`border rounded-2xl p-4 text-left transition-all ${
+              menuLayout === "classic" ? "border-[#F97316] bg-[#FFF7ED]" : "border-[#E5E7EB] bg-white hover:border-[#F97316]/50"
+            }`}
+          >
+            <p className="text-sm font-semibold text-[#0F0E17] mb-1">Classic</p>
+            <p className="text-[11px] text-[#6B7280]">Standard functional design, clean and simple.</p>
+          </button>
+          <button
+            onClick={() => setMenuLayout("modern")}
+            className={`border rounded-2xl p-4 text-left transition-all relative overflow-hidden ${
+              menuLayout === "modern" ? "border-[#F97316] bg-[#FFF7ED]" : "border-[#E5E7EB] bg-white hover:border-[#F97316]/50"
+            }`}
+          >
+            <div className="absolute top-0 right-0 bg-[#F97316] text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">Premium</div>
+            <p className="text-sm font-semibold text-[#0F0E17] mb-1">Modern</p>
+            <p className="text-[11px] text-[#6B7280]">Sleek animations, glassmorphism, optimized for ordering.</p>
+          </button>
+        </div>
       </Card>
 
       {/* Order cancellation window */}
