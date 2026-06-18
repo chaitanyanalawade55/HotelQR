@@ -137,7 +137,7 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
       id,
       hotel_id: hotelId,
       category_id: activeCatId,
-      name: "New item",
+      name: "",
       description: null,
       price: 0,
       image_url: null,
@@ -184,6 +184,15 @@ export function MenuManager({ hotelId, initialCategories, initialItems }: Props)
 
   // Optimistic save — UI already reflects edits; revert if the write fails.
   async function saveItem(item: MenuItem) {
+    if (!item.name || !item.name.trim()) {
+      toast.error("Item name cannot be empty.");
+      return;
+    }
+    if (!item.price || item.price <= 0) {
+      toast.error("Item price must be greater than 0.");
+      return;
+    }
+    
     setEditingItemId(null);
     const base = {
       name: item.name,
