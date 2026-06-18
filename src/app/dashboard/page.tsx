@@ -96,14 +96,14 @@ export default async function DashboardPage() {
               {doneCount}/{steps.length} done
             </span>
           </div>
-          <p className="text-sm text-[#6B7280] mb-3">Finish these few steps to launch your digital menu.</p>
+          <p className="text-sm text-[#6B7280] mb-3">Complete the next step to launch your digital menu.</p>
 
           <div className="w-full h-1.5 bg-[#F3F4F6] rounded-full mb-4 overflow-hidden">
             <div className="h-full bg-[#F97316] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
           </div>
 
           <div className="space-y-2">
-            {remaining.map((s) => {
+            {remaining.slice(0, 1).map((s) => {
               const Icon = s.icon;
               return (
                 <Link
