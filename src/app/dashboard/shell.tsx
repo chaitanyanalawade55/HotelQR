@@ -11,6 +11,7 @@ import {
   ShoppingBag,
   Settings,
   Wallet,
+  Users,
   Menu as MenuIcon,
   X,
   ExternalLink,
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/dashboard/branding", label: "Branding", icon: Palette },
   { href: "/dashboard/qr", label: "QR", icon: QrCode },
   { href: "/dashboard/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/dashboard/staff", label: "Staff", icon: Users },
   { href: "/dashboard/payments", label: "Payments", icon: Wallet },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

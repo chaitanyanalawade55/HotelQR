@@ -80,6 +80,8 @@ export type Order = {
   status: "new" | "preparing" | "done" | "cancelled";
   cancel_token: string | null;
   customer_mobile: string | null;
+  assigned_staff_id: string | null;
+  notes: string | null;
   created_at: string;
 };
 
@@ -96,5 +98,57 @@ export type WaiterCall = {
   table_slug: string | null;
   table_number: string | null;
   status: "pending" | "acknowledged";
+  assigned_staff_id: string | null;
   created_at: string;
+};
+
+export type StaffRole = "waiter" | "cashier" | "chef" | "cleaner" | string;
+export type StaffShift = "morning" | "evening" | "night" | null;
+
+export type Staff = {
+  id: string;
+  hotel_id: string;
+  staff_code: string;
+  full_name: string;
+  mobile: string;
+  email: string | null;
+  gender: string | null;
+  date_of_birth: string | null;
+  address: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_number: string | null;
+  joining_date: string | null;
+  profile_url: string | null;
+  role: StaffRole;
+  shift: StaffShift;
+  salary: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StaffTableAssignment = {
+  id: string;
+  hotel_id: string;
+  staff_id: string;
+  table_id: string;
+  created_at: string;
+};
+
+// Lightweight {table_id, table_number} pairs returned by the staff RPCs.
+export type AssignedTable = { table_id: string; table_number: string };
+
+// Shape returned by _staff_json() / staff_login / staff_me RPCs (no password).
+export type StaffSession = {
+  id: string;
+  hotel_id: string;
+  staff_code: string;
+  full_name: string;
+  mobile: string;
+  email: string | null;
+  role: StaffRole;
+  shift: StaffShift;
+  is_active: boolean;
+  profile_url: string | null;
+  assigned_tables: AssignedTable[];
 };
