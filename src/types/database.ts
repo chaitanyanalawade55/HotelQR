@@ -22,6 +22,9 @@ export type HotelSettings = {
   subscription_tier: "basic" | "pro" | "enterprise";
   order_cancel_minutes: number;
   menu_layout: "classic" | "modern";
+  gst_enabled: boolean;
+  gst_percent: number;
+  gst_number: string | null;
 };
 
 export type Category = {
@@ -76,6 +79,7 @@ export type Order = {
   total: number;
   status: "new" | "preparing" | "done" | "cancelled";
   cancel_token: string | null;
+  customer_mobile: string | null;
   created_at: string;
 };
 

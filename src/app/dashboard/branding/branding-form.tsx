@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Input";
+import { Toggle } from "@/components/ui/Toggle";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/compressImage";
@@ -39,6 +40,9 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
   const [currency, setCurrency] = useState(initialSettings?.currency ?? "INR");
   const [cancelMinutes, setCancelMinutes] = useState(initialSettings?.order_cancel_minutes ?? 5);
   const [menuLayout, setMenuLayout] = useState<"classic" | "modern">(initialSettings?.menu_layout ?? "classic");
+  const [gstEnabled, setGstEnabled] = useState(initialSettings?.gst_enabled ?? false);
+  const [gstPercent, setGstPercent] = useState(initialSettings?.gst_percent ?? 5);
+  const [gstNumber, setGstNumber] = useState(initialSettings?.gst_number ?? "");
   const [logoUrl, setLogoUrl] = useState(initialSettings?.logo_url ?? null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -77,10 +81,20 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
   async function handleSave() {
     setSaving(true);
     const base = { hotel_id: hotel.id, theme_color: themeColor, currency, logo_url: logoUrl, menu_layout: menuLayout };
-    let { error } = await supabase
-      .from("hotel_settings")
-      .upsert({ ...base, order_cancel_minutes: cancelMinutes }, { onConflict: "hotel_id" });
-    // Fall back if the order_cancel_minutes column hasn't been migrated yet.
+    const full = {
+      ...base,
+      order_cancel_minutes: cancelMinutes,
+      gst_enabled: gstEnabled,
+      gst_percent: gstPercent,
+      gst_number: gstNumber.trim() || null,
+    };
+    let { error } = await supabase.from("hotel_settings").upsert(full, { onConflict: "hotel_id" });
+    // Fall back progressively if newer columns haven't been migrated yet.
+    if (error && (error.code === "42703" || /column/i.test(error.message))) {
+      ({ error } = await supabase
+        .from("hotel_settings")
+        .upsert({ ...base, order_cancel_minutes: cancelMinutes }, { onConflict: "hotel_id" }));
+    }
     if (error && (error.code === "42703" || /order_cancel_minutes/i.test(error.message))) {
       ({ error } = await supabase.from("hotel_settings").upsert(base, { onConflict: "hotel_id" }));
     }
@@ -160,6 +174,45 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
             <option key={value} value={value}>{label}</option>
           ))}
         </Select>
+      </Card>
+
+      {/* GST card */}
+      <Card padding="lg">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-sm font-semibold text-[#0F0E17]">GST / Tax</p>
+          <Toggle checked={gstEnabled} onChange={setGstEnabled} />
+        </div>
+        <p className="text-xs text-[#6B7280] mb-3">
+          When enabled, GST is calculated on completed-order bills and shown separately.
+        </p>
+        {gstEnabled && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={gstPercent}
+                onChange={(e) => setGstPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                className="w-24 border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#0F0E17] focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
+              />
+              <span className="text-sm text-[#374151]">% GST rate</span>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[#374151]">GSTIN (optional)</label>
+              <input
+                type="text"
+                value={gstNumber}
+                onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                placeholder="22AAAAA0000A1Z5"
+                maxLength={15}
+                className="mt-1 w-full border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#0F0E17] uppercase placeholder:normal-case focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
+              />
+              <p className="text-[11px] text-[#9CA3AF] mt-1">Printed on the bill header if provided.</p>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Menu layout card */}
