@@ -59,7 +59,7 @@ create index if not exists idx_sta_hotel on public.staff_table_assignments(hotel
 create index if not exists idx_sta_staff on public.staff_table_assignments(staff_id);
 
 create table if not exists public.staff_sessions (
-  token text primary key default encode(gen_random_bytes(32), 'hex'),
+  token text primary key default encode(extensions.gen_random_bytes(32), 'hex'),
   staff_id uuid not null references public.staff(id) on delete cascade,
   hotel_id uuid not null references public.hotels(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -308,7 +308,7 @@ begin
     p_hotel_id, p_full_name, p_mobile, p_email, p_gender, p_dob, p_address,
     p_emergency_name, p_emergency_number, p_joining_date, p_profile_url,
     coalesce(nullif(trim(p_role), ''), 'waiter'), p_shift, p_salary,
-    crypt(p_password, gen_salt('bf'))
+    extensions.crypt(p_password, extensions.gen_salt('bf'))
   )
   returning * into v_staff;
 
@@ -329,7 +329,7 @@ begin
   select hotel_id into v_hotel from public.staff where id = p_staff_id;
   if v_hotel is null or not public._owns_hotel(v_hotel) then raise exception 'not authorized'; end if;
   if coalesce(p_password, '') = '' then raise exception 'password required'; end if;
-  update public.staff set password_hash = crypt(p_password, gen_salt('bf')), updated_at = now() where id = p_staff_id;
+  update public.staff set password_hash = extensions.crypt(p_password, extensions.gen_salt('bf')), updated_at = now() where id = p_staff_id;
   return true;
 end;
 $$;
@@ -353,7 +353,7 @@ begin
   if not found then raise exception 'invalid credentials'; end if;
   if v_staff.is_active = false then raise exception 'account disabled'; end if;
   if v_staff.password_hash is null
-     or crypt(p_password, v_staff.password_hash) <> v_staff.password_hash then
+     or extensions.crypt(p_password, v_staff.password_hash) <> v_staff.password_hash then
     raise exception 'invalid credentials';
   end if;
 
