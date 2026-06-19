@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Bell, Search, Plus, Minus, LogOut, UtensilsCrossed, ClipboardList,
@@ -9,10 +10,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { VegIndicator } from "@/components/ui/VegIndicator";
 import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/billing";
 import { getStaffToken, clearStaffToken, staffMe } from "@/lib/staff/session";
 import type { StaffSession } from "@/types/database";
+
+type FoodType = "veg" | "non_veg" | "egg" | "vegan";
+function safeFoodType(t: string): FoodType {
+  return (["veg", "non_veg", "egg", "vegan"].includes(t) ? t : "veg") as FoodType;
+}
 
 // ── RPC payload shapes ──────────────────────────────────────
 type MenuCategory = { id: string; name: string; sort_order: number };
@@ -263,49 +270,168 @@ function TabButton({
   );
 }
 
-// ── Menu view ───────────────────────────────────────────────
+// ── Shared item UI (mirrors the customer menu look) ─────────
+type FoodFilter = "all" | "veg" | "non_veg";
+
+function matchFilter(i: MenuItem, q: string, f: FoodFilter): boolean {
+  if (q && !i.name.toLowerCase().includes(q) && !(i.description ?? "").toLowerCase().includes(q)) return false;
+  if (f === "veg") return i.food_type === "veg" || i.food_type === "vegan";
+  if (f === "non_veg") return i.food_type === "non_veg";
+  return true;
+}
+
+// Group items by category, with a trailing "Other items" bucket so NOTHING is
+// ever hidden when an item's category is inactive or missing.
+type ItemGroup = { id: string; name: string; list: MenuItem[] };
+function groupItems(items: MenuItem[], categories: MenuCategory[]): ItemGroup[] {
+  const order = new Map<string, number>();
+  const groups: ItemGroup[] = categories.map((c, idx) => {
+    order.set(c.id, idx);
+    return { id: c.id, name: c.name, list: [] as MenuItem[] };
+  });
+  let other: ItemGroup | null = null;
+  for (const it of items) {
+    const gi = it.category_id != null ? order.get(it.category_id) : undefined;
+    if (gi != null) groups[gi].list.push(it);
+    else {
+      if (!other) other = { id: "__other", name: "Other items", list: [] };
+      other.list.push(it);
+    }
+  }
+  const result = groups.filter((g) => g.list.length > 0);
+  if (other) result.push(other);
+  return result;
+}
+
+function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative mb-3">
+      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-white border border-[#E5E7EB] rounded-2xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
+      />
+    </div>
+  );
+}
+
+function FoodFilterPills({ value, onChange }: { value: FoodFilter; onChange: (f: FoodFilter) => void }) {
+  const opts: { v: FoodFilter; label: string; dot?: string }[] = [
+    { v: "all", label: "All" },
+    { v: "veg", label: "Veg", dot: "#10B981" },
+    { v: "non_veg", label: "Non-Veg", dot: "#EF4444" },
+  ];
+  return (
+    <div className="flex gap-2 mb-3">
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          onClick={() => onChange(o.v)}
+          className={[
+            "px-3 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5",
+            value === o.v ? "bg-[#F97316] text-white border-transparent" : "bg-white text-[#6B7280] border-[#E5E7EB]",
+          ].join(" ")}
+        >
+          {o.dot && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: o.dot }} />}
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CategoryHeader({ name, count }: { name: string; count: number }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <div className="w-1 h-5 rounded-full bg-[#F97316]" />
+      <span className="text-xs font-bold text-[#1C1C2E] uppercase tracking-[0.08em]">{name}</span>
+      <div className="flex-1 h-px bg-[#E5E7EB]" />
+      <span className="text-xs text-[#9CA3AF]">{count}</span>
+    </div>
+  );
+}
+
+function ItemImage({ item }: { item: MenuItem }) {
+  if (item.image_url) {
+    return (
+      <Image src={item.image_url} alt={item.name} fill sizes="(max-width:480px) 45vw, 220px" className="object-cover" />
+    );
+  }
+  return (
+    <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#F9731614" }}>
+      <span className="text-3xl opacity-50">🍽️</span>
+    </div>
+  );
+}
+
+// One card, used for both browsing (no actions) and order-taking (qty stepper).
+function ItemCard({ item, qty, onAdd, onSub }: { item: MenuItem; qty?: number; onAdd?: () => void; onSub?: () => void }) {
+  const orderMode = onAdd != null;
+  const q = qty ?? 0;
+  return (
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden flex flex-col relative">
+      <div className="relative w-full aspect-[4/3]">
+        <ItemImage item={item} />
+        {item.badge && (
+          <span className="absolute top-2 left-2 bg-[#F97316] text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow">{item.badge}</span>
+        )}
+        {!item.is_available && (
+          <span className="absolute inset-0 bg-white/55 flex items-center justify-center">
+            <span className="bg-[#1C1C2E] text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">Unavailable</span>
+          </span>
+        )}
+        {orderMode && item.is_available && q === 0 && (
+          <button onClick={onAdd} className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#F97316] text-white flex items-center justify-center shadow-md min-h-0 min-w-0" aria-label="Add">
+            <Plus size={16} />
+          </button>
+        )}
+        {orderMode && q > 0 && (
+          <div className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-white rounded-full shadow-md px-1 py-1">
+            <button onClick={onSub} className="w-6 h-6 rounded-full border border-[#E5E7EB] flex items-center justify-center min-h-0 min-w-0"><Minus size={12} /></button>
+            <span className="text-xs font-semibold w-4 text-center">{q}</span>
+            <button onClick={onAdd} className="w-6 h-6 rounded-full bg-[#F97316] text-white flex items-center justify-center min-h-0 min-w-0"><Plus size={12} /></button>
+          </div>
+        )}
+      </div>
+      <div className="p-2.5 flex flex-col flex-1">
+        <div className="flex items-center gap-1">
+          <VegIndicator type={safeFoodType(item.food_type)} />
+          <span className="text-sm font-semibold text-[#0F0E17] leading-tight line-clamp-1">{item.name}</span>
+        </div>
+        {item.description && <p className="text-[11px] text-[#6B7280] mt-1 leading-snug line-clamp-2">{item.description}</p>}
+        <div className="flex items-center justify-between mt-auto pt-2">
+          <p className="text-sm font-bold text-[#F97316]">{money(item.price)}</p>
+          {!orderMode && <Badge variant={item.is_available ? "green" : "gray"}>{item.is_available ? "Available" : "Off"}</Badge>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Menu view (browse) ──────────────────────────────────────
 function MenuView({ categories, items }: { categories: MenuCategory[]; items: MenuItem[] }) {
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<FoodFilter>("all");
   const query = q.trim().toLowerCase();
-  const groups = useMemo(() => {
-    const visible = items.filter((i) => !query || i.name.toLowerCase().includes(query));
-    return categories
-      .map((c) => ({ cat: c, list: visible.filter((i) => i.category_id === c.id) }))
-      .filter((g) => g.list.length > 0);
-  }, [categories, items, query]);
+  const groups = useMemo(
+    () => groupItems(items.filter((i) => matchFilter(i, query, filter)), categories),
+    [categories, items, query, filter]
+  );
 
   return (
     <div className="px-4 py-4">
-      <div className="relative mb-4">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search menu items…"
-          className="w-full bg-white border border-[#E5E7EB] rounded-2xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
-        />
-      </div>
+      <SearchBar value={q} onChange={setQ} placeholder="Search menu items…" />
+      <FoodFilterPills value={filter} onChange={setFilter} />
       {groups.length === 0 ? (
         <EmptyState icon={<UtensilsCrossed size={24} />} title="No items" description="No menu items match your search." />
       ) : (
-        groups.map(({ cat, list }) => (
-          <div key={cat.id} className="mb-5">
-            <p className="text-xs font-bold uppercase tracking-wider text-[#1C1C2E] mb-2">{cat.name}</p>
-            <div className="space-y-2">
-              {list.map((i) => (
-                <div key={i.id} className="bg-white border border-[#E5E7EB] rounded-2xl p-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-[#0F0E17] truncate">{i.name}</p>
-                    {i.description && <p className="text-xs text-[#9CA3AF] truncate">{i.description}</p>}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-[#0F0E17]">{money(i.price)}</p>
-                    <Badge variant={i.is_available ? "green" : "gray"}>
-                      {i.is_available ? "Available" : "Unavailable"}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+        groups.map((g) => (
+          <div key={g.id} className="mb-5">
+            <CategoryHeader name={g.name} count={g.list.length} />
+            <div className="grid grid-cols-2 gap-3">
+              {g.list.map((i) => <ItemCard key={i.id} item={i} />)}
             </div>
           </div>
         ))
@@ -448,16 +574,14 @@ function NewOrderView({
   const [notes, setNotes] = useState("");
   const [cart, setCart] = useState<Cart>({});
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<FoodFilter>("all");
   const [placing, setPlacing] = useState(false);
   const query = q.trim().toLowerCase();
 
-  const visible = useMemo(
-    () => items.filter((i) => i.is_available && (!query || i.name.toLowerCase().includes(query))),
-    [items, query]
-  );
+  // Only available items can be added to a new order.
   const groups = useMemo(
-    () => categories.map((c) => ({ cat: c, list: visible.filter((i) => i.category_id === c.id) })).filter((g) => g.list.length > 0),
-    [categories, visible]
+    () => groupItems(items.filter((i) => i.is_available && matchFilter(i, query, filter)), categories),
+    [items, categories, query, filter]
   );
 
   const add = (it: MenuItem) =>
@@ -522,43 +646,23 @@ function NewOrderView({
         )}
       </div>
 
-      <div className="relative mb-3">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search items to add…"
-          className="w-full bg-white border border-[#E5E7EB] rounded-2xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
-        />
-      </div>
+      <SearchBar value={q} onChange={setQ} placeholder="Search items to add…" />
+      <FoodFilterPills value={filter} onChange={setFilter} />
 
-      {groups.map(({ cat, list }) => (
-        <div key={cat.id} className="mb-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-[#1C1C2E] mb-2">{cat.name}</p>
-          <div className="space-y-2">
-            {list.map((i) => {
-              const qty = cart[i.id]?.qty ?? 0;
-              return (
-                <div key={i.id} className="bg-white border border-[#E5E7EB] rounded-2xl p-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-[#0F0E17] truncate">{i.name}</p>
-                    <p className="text-xs text-[#9CA3AF]">{money(i.price)}</p>
-                  </div>
-                  {qty === 0 ? (
-                    <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => add(i)}>Add</Button>
-                  ) : (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={() => sub(i)} className="w-7 h-7 rounded-full border border-[#E5E7EB] flex items-center justify-center min-h-0 min-w-0"><Minus size={14} /></button>
-                      <span className="w-5 text-center text-sm font-semibold">{qty}</span>
-                      <button onClick={() => add(i)} className="w-7 h-7 rounded-full bg-[#1C1C2E] text-white flex items-center justify-center min-h-0 min-w-0"><Plus size={14} /></button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+      {groups.length === 0 ? (
+        <EmptyState icon={<UtensilsCrossed size={24} />} title="No items" description="No available items match your search." />
+      ) : (
+        groups.map((g) => (
+          <div key={g.id} className="mb-4">
+            <CategoryHeader name={g.name} count={g.list.length} />
+            <div className="grid grid-cols-2 gap-3">
+              {g.list.map((i) => (
+                <ItemCard key={i.id} item={i} qty={cart[i.id]?.qty ?? 0} onAdd={() => add(i)} onSub={() => sub(i)} />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))
+      )}
 
       {/* Special instructions */}
       <textarea

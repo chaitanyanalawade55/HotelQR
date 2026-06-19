@@ -408,8 +408,9 @@ begin
     'categories', coalesce((
       select jsonb_agg(to_jsonb(c) order by c.sort_order)
       from (
-        select id, name, sort_order from public.categories
-        where hotel_id = v_staff.hotel_id and is_active = true
+        -- All categories (incl. inactive) so staff can take orders for any item.
+        select id, name, sort_order, is_active from public.categories
+        where hotel_id = v_staff.hotel_id
       ) c
     ), '[]'::jsonb),
     'items', coalesce((
