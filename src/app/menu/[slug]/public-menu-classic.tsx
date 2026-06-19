@@ -208,6 +208,12 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
 
   const cartTotal = useMemo(() => cart.reduce((sum, c) => sum + c.price * c.qty, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((sum, c) => sum + c.qty, 0), [cart]);
+  // Fast itemId -> qty lookup so each card can show an inline +/- stepper.
+  const cartQty = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const c of cart) m[c.itemId] = c.qty;
+    return m;
+  }, [cart]);
 
   async function callWaiter() {
     const COOLDOWN_KEY = `waiter-${hotel.id}-${tableSlug}`;
@@ -380,7 +386,13 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         style={{ "--theme": themeColor, "--theme-light": themeLight } as React.CSSProperties}
       >
         {/* Header */}
-        <div className="px-5 pt-6 pb-5" style={{ backgroundColor: themeColor }}>
+        <div
+          className="px-5 pt-6 pb-5"
+          style={{
+            backgroundColor: themeColor,
+            backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.14), rgba(0,0,0,0.12))",
+          }}
+        >
           <div className="flex items-center gap-3">
             <div className="w-[52px] h-[52px] rounded-full border-2 border-white/30 overflow-hidden flex items-center justify-center flex-shrink-0 bg-white/20 relative">
               {settings?.logo_url ? (
@@ -482,7 +494,9 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
                     key={item.id}
                     item={item}
                     themeColor={themeColor}
+                    qty={cartQty[item.id] ?? 0}
                     onAdd={() => addToCart(item)}
+                    onDec={() => changeQty(item.id, -1)}
                     onLongPress={() => setRatingItem(item)}
                   />
                 ))}
@@ -516,7 +530,9 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
                         item={item}
                         themeColor={themeColor}
                         rating={ratings[item.id]}
+                        qty={cartQty[item.id] ?? 0}
                         onAdd={() => addToCart(item)}
+                        onDec={() => changeQty(item.id, -1)}
                         onLongPress={() => setRatingItem(item)}
                       />
                     ))}
@@ -565,15 +581,23 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         {cartCount > 0 && (
           <button
             onClick={() => setCartOpen(true)}
-            className="pointer-events-auto absolute bottom-0 inset-x-0 flex items-center justify-between px-5 py-4 text-left"
+            className="pointer-events-auto absolute bottom-0 inset-x-0 flex items-center justify-between px-5 py-4 text-left active:brightness-95 transition"
             style={{ backgroundColor: themeColor }}
           >
-            <div>
-              <p className="text-white text-sm font-medium">
-                {cartCount} item{cartCount !== 1 ? "s" : ""}
-              </p>
+            <div className="flex items-center gap-3">
+              <span className="bg-white/25 text-white text-sm font-bold rounded-full min-w-[28px] h-7 px-1.5 flex items-center justify-center tabular-nums">
+                {cartCount}
+              </span>
+              <div>
+                <p className="text-white text-sm font-semibold leading-tight">View order</p>
+                <p className="text-white/80 text-xs leading-tight">
+                  {cartCount} item{cartCount !== 1 ? "s" : ""}
+                </p>
+              </div>
             </div>
-            <span className="text-white font-semibold text-sm">View order →</span>
+            <span className="text-white font-bold text-base flex items-center gap-1.5 tabular-nums">
+              ₹{cartTotal} <span className="opacity-80 font-semibold">→</span>
+            </span>
           </button>
         )}
       </div>
@@ -670,16 +694,58 @@ function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: st
   );
 }
 
-function AddButton({ onAdd, themeColor }: { onAdd: () => void; themeColor: string }) {
+// Floating control on a dish image: a single "+" until the item is in the cart,
+// then an inline −/qty/+ stepper so quantity can be tweaked without the cart.
+function QtyControl({
+  qty,
+  onAdd,
+  onDec,
+  themeColor,
+}: {
+  qty: number;
+  onAdd: () => void;
+  onDec: () => void;
+  themeColor: string;
+}) {
+  if (qty === 0) {
+    return (
+      <button
+        onClick={onAdd}
+        className="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center min-h-0 min-w-0 shadow-md active:scale-90 transition-transform"
+        style={{ backgroundColor: themeColor }}
+        aria-label="Add to order"
+      >
+        <Plus size={16} className="text-white" />
+      </button>
+    );
+  }
   return (
-    <button
-      onClick={onAdd}
-      className="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center min-h-0 min-w-0 shadow-md"
+    <div
+      className="absolute bottom-2 right-2 flex items-center h-8 rounded-full shadow-md px-0.5"
       style={{ backgroundColor: themeColor }}
-      aria-label="Add to order"
     >
-      <Plus size={16} className="text-white" />
-    </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDec();
+        }}
+        className="w-7 h-7 flex items-center justify-center text-white min-h-0 min-w-0"
+        aria-label="Decrease quantity"
+      >
+        <Minus size={14} />
+      </button>
+      <span className="text-white text-xs font-bold w-4 text-center tabular-nums select-none">{qty}</span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onAdd();
+        }}
+        className="w-7 h-7 flex items-center justify-center text-white min-h-0 min-w-0"
+        aria-label="Increase quantity"
+      >
+        <Plus size={14} />
+      </button>
+    </div>
   );
 }
 
@@ -687,20 +753,27 @@ const GridItemCard = memo(function GridItemCard({
   item,
   themeColor,
   rating,
+  qty,
   onAdd,
+  onDec,
   onLongPress,
 }: {
   item: MenuItem;
   themeColor: string;
   rating?: { sum: number; count: number };
+  qty: number;
   onAdd: () => void;
+  onDec: () => void;
   onLongPress: () => void;
 }) {
   const longPress = useLongPress(onLongPress);
   const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden flex flex-col relative">
+    <div
+      className="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col relative transition-shadow"
+      style={{ borderColor: qty > 0 ? themeColor : "#E5E7EB" }}
+    >
       <div className="relative w-full aspect-[4/3]">
         <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
         {item.badge && (
@@ -711,7 +784,7 @@ const GridItemCard = memo(function GridItemCard({
             {item.badge}
           </span>
         )}
-        <AddButton onAdd={onAdd} themeColor={themeColor} />
+        <QtyControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
       </div>
 
       <div className="p-2.5 flex flex-col flex-1" {...longPress}>
@@ -732,19 +805,23 @@ const GridItemCard = memo(function GridItemCard({
 const SpecialCard = memo(function SpecialCard({
   item,
   themeColor,
+  qty,
   onAdd,
+  onDec,
   onLongPress,
 }: {
   item: MenuItem;
   themeColor: string;
+  qty: number;
   onAdd: () => void;
+  onDec: () => void;
   onLongPress: () => void;
 }) {
   const longPress = useLongPress(onLongPress);
   return (
     <div
       className="flex-shrink-0 w-40 snap-start bg-white rounded-2xl border-2 overflow-hidden shadow-sm relative"
-      style={{ borderColor: `${themeColor}55` }}
+      style={{ borderColor: qty > 0 ? themeColor : `${themeColor}55` }}
     >
       <div className="relative w-full aspect-[4/3]">
         <DishImage item={item} themeColor={themeColor} sizes="160px" />
@@ -754,7 +831,7 @@ const SpecialCard = memo(function SpecialCard({
         >
           <Sparkles size={9} /> Special
         </span>
-        <AddButton onAdd={onAdd} themeColor={themeColor} />
+        <QtyControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
       </div>
       <div className="p-2.5" {...longPress}>
         <div className="flex items-center gap-1">
@@ -846,8 +923,18 @@ const CartSheet = memo(function CartSheet({
                     <Plus size={14} />
                   </button>
                 </div>
+                <span className="text-sm font-semibold text-[#0F0E17] w-14 text-right tabular-nums">
+                  ₹{c.price * c.qty}
+                </span>
               </div>
             ))}
+          </div>
+        )}
+
+        {cart.length > 0 && (
+          <div className="flex items-center justify-between pt-3.5 mt-0.5 border-t border-[#E5E7EB]">
+            <span className="text-sm text-[#6B7280]">Total</span>
+            <span className="text-lg font-bold text-[#0F0E17] tabular-nums">₹{total}</span>
           </div>
         )}
 
@@ -861,7 +948,7 @@ const CartSheet = memo(function CartSheet({
             ? appendMode
               ? "Adding..."
               : "Placing order..."
-            : `${appendMode ? "Add to order" : "Place order"}`}
+            : `${appendMode ? "Add to order" : "Place order"} · ₹${total}`}
         </button>
       </div>
     </div>

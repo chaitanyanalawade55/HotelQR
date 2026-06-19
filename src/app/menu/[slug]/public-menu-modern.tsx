@@ -209,6 +209,12 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
 
   const cartTotal = useMemo(() => cart.reduce((sum, c) => sum + c.price * c.qty, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((sum, c) => sum + c.qty, 0), [cart]);
+  // Fast itemId -> qty lookup so each card can show an inline +/- stepper.
+  const cartQty = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const c of cart) m[c.itemId] = c.qty;
+    return m;
+  }, [cart]);
 
   async function callWaiter() {
     const COOLDOWN_KEY = `waiter-${hotel.id}-${tableSlug}`;
@@ -381,7 +387,13 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
         style={{ "--theme": themeColor, "--theme-light": themeLight } as React.CSSProperties}
       >
         {/* Header */}
-        <div className="px-5 pt-6 pb-5" style={{ backgroundColor: themeColor }}>
+        <div
+          className="px-5 pt-6 pb-5"
+          style={{
+            backgroundColor: themeColor,
+            backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.14), rgba(0,0,0,0.12))",
+          }}
+        >
           <div className="flex items-center gap-3">
             <div className="w-[52px] h-[52px] rounded-full border-2 border-white/30 overflow-hidden flex items-center justify-center flex-shrink-0 bg-white/20 relative">
               {settings?.logo_url ? (
@@ -483,7 +495,9 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                     key={item.id}
                     item={item}
                     themeColor={themeColor}
+                    qty={cartQty[item.id] ?? 0}
                     onAdd={() => addToCart(item)}
+                    onDec={() => changeQty(item.id, -1)}
                     onLongPress={() => setRatingItem(item)}
                   />
                 ))}
@@ -517,7 +531,9 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                         item={item}
                         themeColor={themeColor}
                         rating={ratings[item.id]}
+                        qty={cartQty[item.id] ?? 0}
                         onAdd={() => addToCart(item)}
+                        onDec={() => changeQty(item.id, -1)}
                         onLongPress={() => setRatingItem(item)}
                       />
                     ))}
@@ -579,17 +595,25 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
               className="pointer-events-auto absolute bottom-0 inset-x-0 flex items-center justify-between px-5 py-5 text-left rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.15)]"
               style={{ backgroundColor: themeColor }}
             >
-              <div>
-                <motion.p
+              <div className="flex items-center gap-3">
+                <motion.span
                   key={cartCount}
-                  initial={{ scale: 1.2 }}
+                  initial={{ scale: 1.3 }}
                   animate={{ scale: 1 }}
-                  className="text-white text-sm font-semibold tracking-wide"
+                  className="bg-white/25 text-white text-sm font-bold rounded-full min-w-[28px] h-7 px-1.5 flex items-center justify-center tabular-nums"
                 >
-                  {cartCount} item{cartCount !== 1 ? "s" : ""}
-                </motion.p>
+                  {cartCount}
+                </motion.span>
+                <div>
+                  <p className="text-white text-sm font-semibold tracking-wide leading-tight">View order</p>
+                  <p className="text-white/80 text-xs leading-tight">
+                    {cartCount} item{cartCount !== 1 ? "s" : ""}
+                  </p>
+                </div>
               </div>
-              <span className="text-white font-bold text-sm bg-white/20 px-3 py-1.5 rounded-full">View order →</span>
+              <span className="text-white font-bold text-base bg-white/20 px-3.5 py-1.5 rounded-full tabular-nums">
+                ₹{cartTotal} →
+              </span>
             </motion.button>
           )}
         </AnimatePresence>
@@ -687,16 +711,68 @@ function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: st
   );
 }
 
-function AddButton({ onAdd, themeColor }: { onAdd: () => void; themeColor: string }) {
+// Floating control on a dish image: a single "+" until the item is in the cart,
+// then an inline −/qty/+ stepper so quantity can be tweaked without the cart.
+function QtyControl({
+  qty,
+  onAdd,
+  onDec,
+  themeColor,
+}: {
+  qty: number;
+  onAdd: () => void;
+  onDec: () => void;
+  themeColor: string;
+}) {
+  if (qty === 0) {
+    return (
+      <motion.button
+        whileTap={{ scale: 0.85 }}
+        onClick={onAdd}
+        className="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center min-h-0 min-w-0 shadow-md"
+        style={{ backgroundColor: themeColor }}
+        aria-label="Add to order"
+      >
+        <Plus size={16} className="text-white" />
+      </motion.button>
+    );
+  }
   return (
-    <button
-      onClick={onAdd}
-      className="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center min-h-0 min-w-0 shadow-md"
+    <motion.div
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className="absolute bottom-2 right-2 flex items-center h-8 rounded-full shadow-md px-0.5"
       style={{ backgroundColor: themeColor }}
-      aria-label="Add to order"
     >
-      <Plus size={16} className="text-white" />
-    </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDec();
+        }}
+        className="w-7 h-7 flex items-center justify-center text-white min-h-0 min-w-0"
+        aria-label="Decrease quantity"
+      >
+        <Minus size={14} />
+      </button>
+      <motion.span
+        key={qty}
+        initial={{ scale: 1.3 }}
+        animate={{ scale: 1 }}
+        className="text-white text-xs font-bold w-4 text-center tabular-nums select-none"
+      >
+        {qty}
+      </motion.span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onAdd();
+        }}
+        className="w-7 h-7 flex items-center justify-center text-white min-h-0 min-w-0"
+        aria-label="Increase quantity"
+      >
+        <Plus size={14} />
+      </button>
+    </motion.div>
   );
 }
 
@@ -704,13 +780,17 @@ const GridItemCard = memo(function GridItemCard({
   item,
   themeColor,
   rating,
+  qty,
   onAdd,
+  onDec,
   onLongPress,
 }: {
   item: MenuItem;
   themeColor: string;
   rating?: { sum: number; count: number };
+  qty: number;
   onAdd: () => void;
+  onDec: () => void;
   onLongPress: () => void;
 }) {
   const longPress = useLongPress(onLongPress);
@@ -719,7 +799,8 @@ const GridItemCard = memo(function GridItemCard({
   return (
     <motion.div
       whileTap={{ scale: 0.96 }}
-      className="bg-white rounded-3xl border border-[#E5E7EB]/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col relative"
+      className="bg-white rounded-3xl border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col relative"
+      style={{ borderColor: qty > 0 ? themeColor : "rgba(229,231,235,0.6)" }}
     >
       <div className="relative w-full aspect-[4/3]">
         <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
@@ -731,7 +812,7 @@ const GridItemCard = memo(function GridItemCard({
             {item.badge}
           </span>
         )}
-        <AddButton onAdd={onAdd} themeColor={themeColor} />
+        <QtyControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
       </div>
 
       <div className="p-3 flex flex-col flex-1" {...longPress}>
@@ -752,12 +833,16 @@ const GridItemCard = memo(function GridItemCard({
 const SpecialCard = memo(function SpecialCard({
   item,
   themeColor,
+  qty,
   onAdd,
+  onDec,
   onLongPress,
 }: {
   item: MenuItem;
   themeColor: string;
+  qty: number;
   onAdd: () => void;
+  onDec: () => void;
   onLongPress: () => void;
 }) {
   const longPress = useLongPress(onLongPress);
@@ -765,7 +850,7 @@ const SpecialCard = memo(function SpecialCard({
     <motion.div
       whileTap={{ scale: 0.96 }}
       className="flex-shrink-0 w-44 snap-start bg-white rounded-3xl border-2 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative"
-      style={{ borderColor: `${themeColor}22` }}
+      style={{ borderColor: qty > 0 ? themeColor : `${themeColor}22` }}
     >
       <div className="relative w-full aspect-[4/3]">
         <DishImage item={item} themeColor={themeColor} sizes="160px" />
@@ -775,7 +860,7 @@ const SpecialCard = memo(function SpecialCard({
         >
           <Sparkles size={10} /> Special
         </span>
-        <AddButton onAdd={onAdd} themeColor={themeColor} />
+        <QtyControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
       </div>
       <div className="p-3" {...longPress}>
         <div className="flex items-center gap-1">
@@ -867,8 +952,18 @@ const CartSheet = memo(function CartSheet({
                     <Plus size={14} />
                   </button>
                 </div>
+                <span className="text-sm font-semibold text-[#0F0E17] w-14 text-right tabular-nums">
+                  ₹{c.price * c.qty}
+                </span>
               </div>
             ))}
+          </div>
+        )}
+
+        {cart.length > 0 && (
+          <div className="flex items-center justify-between pt-3.5 mt-0.5 border-t border-[#E5E7EB]">
+            <span className="text-sm text-[#6B7280]">Total</span>
+            <span className="text-lg font-bold text-[#0F0E17] tabular-nums">₹{total}</span>
           </div>
         )}
 
@@ -882,7 +977,7 @@ const CartSheet = memo(function CartSheet({
             ? appendMode
               ? "Adding..."
               : "Placing order..."
-            : `${appendMode ? "Add to order" : "Place order"}`}
+            : `${appendMode ? "Add to order" : "Place order"} · ₹${total}`}
         </button>
       </div>
     </div>
