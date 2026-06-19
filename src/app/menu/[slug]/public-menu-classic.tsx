@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useMemo, useEffect, useCallback, memo } from "react";
 import Image from "next/image";
-import { Search, X, Plus, Minus, Bell, Star, Sparkles, Clock, CheckCircle2, XCircle, ChevronLeft } from "lucide-react";
+import { Search, X, Plus, Minus, Bell, Star, Sparkles, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { createClient } from "@/lib/supabase/client";
@@ -94,6 +94,8 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   // The order-status screen overlays the menu. Hiding it (without clearing the
   // active order) lets the customer browse and add more items to the SAME order.
   const [statusOpen, setStatusOpen] = useState(false);
+  // Floating "MENU" jump-to-category sheet (Swiggy/Zomato style).
+  const [catSheetOpen, setCatSheetOpen] = useState(false);
   const catTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const supabase = createClient();
 
@@ -382,7 +384,7 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
     <div className="min-h-screen w-full bg-[#15161F] flex justify-center">
       {/* Mobile-width menu column */}
       <div
-        className={`relative w-full ${FRAME} min-h-screen bg-[#FFFAF3] md:shadow-2xl`}
+        className={`relative w-full ${FRAME} min-h-screen bg-white md:shadow-2xl`}
         style={{ "--theme": themeColor, "--theme-light": themeLight } as React.CSSProperties}
       >
         {/* Header */}
@@ -480,20 +482,21 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         </div>
 
         {/* Content */}
-        <div className="px-4 py-4 pb-28">
-          {/* Specialities */}
+        <div className="pb-32">
+          {/* Specials — premium horizontal carousel */}
           {specialItems.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center gap-1.5 mb-3">
-                <Sparkles size={16} style={{ color: themeColor }} />
-                <span className="text-[15px] font-bold text-[#1C1C2E]">Our Specialities</span>
+            <div className="pt-5 pb-2">
+              <div className="flex items-center gap-1.5 px-4 mb-3">
+                <Sparkles size={17} style={{ color: themeColor }} />
+                <span className="text-[16px] font-extrabold text-[#1C1C2E] tracking-tight">Our Specials</span>
               </div>
-              <div className="flex gap-3 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1 snap-x">
+              <div className="flex gap-3.5 overflow-x-auto scrollbar-hide px-4 pb-1 snap-x">
                 {specialItems.map((item) => (
                   <SpecialCard
                     key={item.id}
                     item={item}
                     themeColor={themeColor}
+                    rating={ratings[item.id]}
                     qty={cartQty[item.id] ?? 0}
                     onAdd={() => addToCart(item)}
                     onDec={() => changeQty(item.id, -1)}
@@ -501,31 +504,31 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
                   />
                 ))}
               </div>
+              <div className="h-2 bg-[#F4F4F6] mt-4" />
             </div>
           )}
 
           {!hasResults ? (
-            <div className="flex flex-col items-center text-center py-20">
+            <div className="flex flex-col items-center text-center py-20 px-4">
               <span className="text-4xl mb-3">🍽️</span>
               <p className="text-[#374151] font-medium">Nothing found</p>
               <p className="text-sm text-[#9CA3AF] mt-1">Try a different search or adjust your filters.</p>
             </div>
           ) : (
-            filteredByCat.map(({ cat, items: catItems }) => {
+            filteredByCat.map(({ cat, items: catItems }, idx) => {
               if (catItems.length === 0) return null;
               return (
                 <div key={cat.id} id={`cat-${cat.id}`} className="scroll-mt-[156px]">
-                  {/* Category divider */}
-                  <div className="flex items-center gap-3 mb-3 py-1 sticky top-[156px] z-20" style={{ backgroundColor: "#FFFAF3" }}>
-                    <div className="w-1 h-5 rounded-full" style={{ backgroundColor: themeColor }} />
-                    <span className="text-xs font-bold text-[#1C1C2E] uppercase tracking-[0.08em]">{cat.name}</span>
-                    <div className="flex-1 h-px bg-[#E5E7EB]" />
-                    <span className="text-xs text-[#9CA3AF]">{catItems.length}</span>
+                  {/* Category header */}
+                  <div className="flex items-center justify-between px-4 pt-5 pb-2 sticky top-[156px] z-20 bg-white">
+                    <h2 className="text-[17px] font-extrabold text-[#1C1C2E] tracking-tight">
+                      {cat.name} <span className="text-[#9CA3AF] font-bold">({catItems.length})</span>
+                    </h2>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="px-4">
                     {catItems.map((item) => (
-                      <GridItemCard
+                      <ItemRow
                         key={item.id}
                         item={item}
                         themeColor={themeColor}
@@ -537,6 +540,8 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
                       />
                     ))}
                   </div>
+
+                  {idx < filteredByCat.length - 1 && <div className="h-2 bg-[#F4F4F6] mt-3" />}
                 </div>
               );
             })
@@ -561,6 +566,20 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         >
           <Bell size={22} style={{ color: themeColor }} />
         </button>
+
+        {/* Floating MENU button — jump to any category (Swiggy/Zomato style) */}
+        {categories.length > 1 && (
+          <button
+            onClick={() => setCatSheetOpen(true)}
+            className={[
+              "pointer-events-auto absolute left-1/2 -translate-x-1/2 bg-[#1C1C2E] text-white rounded-2xl px-4 py-3 shadow-xl flex items-center gap-2 active:scale-95 transition-transform",
+              cartCount > 0 || (activeOrder && !statusOpen) ? "bottom-24" : "bottom-6",
+            ].join(" ")}
+          >
+            <List size={17} />
+            <span className="text-sm font-bold tracking-wide">MENU</span>
+          </button>
+        )}
 
         {/* Re-open the active order when browsing to add more items (cart empty) */}
         {activeOrder && !statusOpen && cartCount === 0 && (
@@ -619,6 +638,20 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         />
       )}
 
+      {/* Category jump sheet */}
+      {catSheetOpen && (
+        <CategorySheet
+          groups={filteredByCat}
+          themeColor={themeColor}
+          activeCatId={activeCatId}
+          onPick={(catId) => {
+            selectCat(catId);
+            setCatSheetOpen(false);
+          }}
+          onClose={() => setCatSheetOpen(false)}
+        />
+      )}
+
       {/* Rating bottom sheet */}
       {ratingItem && (
         <RatingSheet item={ratingItem} themeColor={themeColor} onClose={() => setRatingItem(null)} onRate={(v) => submitRating(ratingItem, v)} />
@@ -660,15 +693,14 @@ function useLongPress(onLongPress: () => void, ms = 500) {
   };
 }
 
-function RatingStars({ avg, themeColor, count }: { avg: number; themeColor: string; count: number }) {
+// Compact green rating badge (Zomato style) — a trust signal at a glance.
+function RatingPill({ avg, count }: { avg: number; count: number }) {
   return (
-    <div className="flex items-center gap-0.5 mt-1">
-      {[1, 2, 3, 4, 5].map((s) => {
-        const filled = s <= Math.round(avg);
-        return <Star key={s} size={9} style={{ color: filled ? themeColor : "#E5E7EB", fill: filled ? themeColor : "transparent" }} />;
-      })}
-      <span className="text-[10px] text-[#9CA3AF] ml-0.5">({count})</span>
-    </div>
+    <span className="inline-flex items-center gap-1 bg-[#E7F6EC] text-[#1B7A3D] text-[11px] font-bold px-1.5 py-[3px] rounded-md leading-none">
+      <Star size={9} style={{ fill: "#1B7A3D", color: "#1B7A3D" }} />
+      {avg.toFixed(1)}
+      <span className="text-[#4A9E6A] font-semibold">({count})</span>
+    </span>
   );
 }
 
@@ -694,9 +726,9 @@ function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: st
   );
 }
 
-// Floating control on a dish image: a single "+" until the item is in the cart,
-// then an inline −/qty/+ stepper so quantity can be tweaked without the cart.
-function QtyControl({
+// Zomato/Swiggy-style ADD control that sits over the dish image: a white "ADD"
+// pill until the item is in the cart, then an inline −/qty/+ stepper.
+function AddPill({
   qty,
   onAdd,
   onDec,
@@ -711,45 +743,52 @@ function QtyControl({
     return (
       <button
         onClick={onAdd}
-        className="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center min-h-0 min-w-0 shadow-md active:scale-90 transition-transform"
-        style={{ backgroundColor: themeColor }}
+        className="w-full h-9 rounded-xl bg-white border shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex items-center justify-center gap-1 font-extrabold text-[13px] tracking-wider active:scale-95 transition-transform min-h-0"
+        style={{ borderColor: `${themeColor}40`, color: themeColor }}
         aria-label="Add to order"
       >
-        <Plus size={16} className="text-white" />
+        ADD
+        <Plus size={14} strokeWidth={3} />
       </button>
     );
   }
   return (
     <div
-      className="absolute bottom-2 right-2 flex items-center h-8 rounded-full shadow-md px-0.5"
-      style={{ backgroundColor: themeColor }}
+      className="w-full h-9 rounded-xl bg-white border shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex items-center justify-between"
+      style={{ borderColor: themeColor }}
     >
       <button
         onClick={(e) => {
           e.stopPropagation();
           onDec();
         }}
-        className="w-7 h-7 flex items-center justify-center text-white min-h-0 min-w-0"
+        className="h-full px-2.5 flex items-center justify-center min-h-0 min-w-0"
+        style={{ color: themeColor }}
         aria-label="Decrease quantity"
       >
-        <Minus size={14} />
+        <Minus size={15} strokeWidth={3} />
       </button>
-      <span className="text-white text-xs font-bold w-4 text-center tabular-nums select-none">{qty}</span>
+      <span className="font-extrabold text-sm tabular-nums select-none" style={{ color: themeColor }}>
+        {qty}
+      </span>
       <button
         onClick={(e) => {
           e.stopPropagation();
           onAdd();
         }}
-        className="w-7 h-7 flex items-center justify-center text-white min-h-0 min-w-0"
+        className="h-full px-2.5 flex items-center justify-center min-h-0 min-w-0"
+        style={{ color: themeColor }}
         aria-label="Increase quantity"
       >
-        <Plus size={14} />
+        <Plus size={15} strokeWidth={3} />
       </button>
     </div>
   );
 }
 
-const GridItemCard = memo(function GridItemCard({
+// Signature Swiggy/Zomato list row: details on the left, a square dish image on
+// the right with the ADD pill overlapping its lower edge.
+const ItemRow = memo(function ItemRow({
   item,
   themeColor,
   rating,
@@ -768,35 +807,50 @@ const GridItemCard = memo(function GridItemCard({
 }) {
   const longPress = useLongPress(onLongPress);
   const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
+  const hasImage = Boolean(item.image_url);
 
   return (
-    <div
-      className="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col relative transition-shadow"
-      style={{ borderColor: qty > 0 ? themeColor : "#E5E7EB" }}
-    >
-      <div className="relative w-full aspect-[4/3]">
-        <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
-        {item.badge && (
-          <span
-            className="absolute top-2 left-2 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow"
-            style={{ backgroundColor: themeColor }}
-          >
-            {item.badge}
-          </span>
+    <div className="flex gap-3 py-4 border-b border-[#F0F0F2] last:border-0">
+      {/* Left — details */}
+      <div className="flex-1 min-w-0" {...longPress}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <VegIndicator type={item.food_type} />
+          {item.badge && (
+            <span className="flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: themeColor }}>
+              <Star size={9} style={{ fill: themeColor, color: themeColor }} />
+              {item.badge}
+            </span>
+          )}
+        </div>
+        <h3 className="text-[15px] font-semibold text-[#1C1C2E] leading-snug">{item.name}</h3>
+        {rating && rating.count >= 3 && (
+          <div className="mt-1.5">
+            <RatingPill avg={avg} count={rating.count} />
+          </div>
         )}
-        <QtyControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
+        <p className="text-[15px] font-bold text-[#1C1C2E] mt-1.5">₹{item.price}</p>
+        {item.description && (
+          <p className="text-xs text-[#6B7280] mt-1.5 leading-relaxed line-clamp-2">{item.description}</p>
+        )}
       </div>
 
-      <div className="p-2.5 flex flex-col flex-1" {...longPress}>
-        <div className="flex items-center gap-1">
-          <VegIndicator type={item.food_type} />
-          <span className="text-sm font-semibold text-[#0F0E17] leading-tight line-clamp-1">{item.name}</span>
-        </div>
-        {item.description && <p className="text-[11px] text-[#6B7280] mt-1 leading-snug line-clamp-2">{item.description}</p>}
-        {rating && rating.count >= 3 && <RatingStars avg={avg} themeColor={themeColor} count={rating.count} />}
-        <p className="text-sm font-bold mt-auto pt-2" style={{ color: themeColor }}>
-          ₹{item.price}
-        </p>
+      {/* Right — image + ADD pill */}
+      <div className={`flex-shrink-0 ${hasImage ? "w-[116px]" : "w-[88px]"}`}>
+        {hasImage ? (
+          <div className="relative">
+            <div className="relative w-[116px] h-[116px] rounded-2xl overflow-hidden bg-[#F4F4F6]">
+              <DishImage item={item} themeColor={themeColor} sizes="116px" />
+            </div>
+            <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 w-[92px]">
+              <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
+            </div>
+          </div>
+        ) : (
+          // No image — just the ADD pill, vertically centred against the text.
+          <div className="w-[88px] pt-1">
+            <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -805,6 +859,7 @@ const GridItemCard = memo(function GridItemCard({
 const SpecialCard = memo(function SpecialCard({
   item,
   themeColor,
+  rating,
   qty,
   onAdd,
   onDec,
@@ -812,35 +867,94 @@ const SpecialCard = memo(function SpecialCard({
 }: {
   item: MenuItem;
   themeColor: string;
+  rating?: { sum: number; count: number };
   qty: number;
   onAdd: () => void;
   onDec: () => void;
   onLongPress: () => void;
 }) {
   const longPress = useLongPress(onLongPress);
+  const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
   return (
-    <div
-      className="flex-shrink-0 w-40 snap-start bg-white rounded-2xl border-2 overflow-hidden shadow-sm relative"
-      style={{ borderColor: qty > 0 ? themeColor : `${themeColor}55` }}
-    >
-      <div className="relative w-full aspect-[4/3]">
-        <DishImage item={item} themeColor={themeColor} sizes="160px" />
+    <div className="flex-shrink-0 w-[168px] snap-start">
+      <div className="relative w-full aspect-square rounded-3xl overflow-hidden bg-[#F4F4F6] shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+        <DishImage item={item} themeColor={themeColor} sizes="168px" />
+        {/* gradient scrim for legibility */}
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent" />
         <span
-          className="absolute top-2 left-2 flex items-center gap-0.5 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full shadow"
-          style={{ backgroundColor: themeColor }}
+          className="absolute top-2.5 left-2.5 flex items-center gap-1 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md backdrop-blur-sm"
+          style={{ backgroundColor: `${themeColor}E6` }}
         >
-          <Sparkles size={9} /> Special
+          <Sparkles size={10} /> SPECIAL
         </span>
-        <QtyControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
-      </div>
-      <div className="p-2.5" {...longPress}>
-        <div className="flex items-center gap-1">
-          <VegIndicator type={item.food_type} />
-          <span className="text-sm font-semibold text-[#0F0E17] leading-tight line-clamp-1">{item.name}</span>
+        <div className="absolute bottom-2.5 left-2.5 right-2.5">
+          <div className="flex items-center gap-1.5">
+            <VegIndicator type={item.food_type} />
+            <span className="text-white text-sm font-bold leading-tight line-clamp-1 drop-shadow">{item.name}</span>
+          </div>
         </div>
-        <p className="text-sm font-bold mt-1.5" style={{ color: themeColor }}>
-          ₹{item.price}
-        </p>
+      </div>
+      <div className="flex items-center justify-between gap-2 mt-2.5 px-0.5" {...longPress}>
+        <div className="min-w-0">
+          <p className="text-[15px] font-bold text-[#1C1C2E] leading-none">₹{item.price}</p>
+          {rating && rating.count >= 3 && (
+            <div className="mt-1.5">
+              <RatingPill avg={avg} count={rating.count} />
+            </div>
+          )}
+        </div>
+        <div className="w-[92px] flex-shrink-0">
+          <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Bottom-sheet category index reached from the floating MENU button.
+const CategorySheet = memo(function CategorySheet({
+  groups,
+  themeColor,
+  activeCatId,
+  onPick,
+  onClose,
+}: {
+  groups: { cat: Category; items: MenuItem[] }[];
+  themeColor: string;
+  activeCatId: string | null;
+  onPick: (catId: string) => void;
+  onClose: () => void;
+}) {
+  const visible = groups.filter((g) => g.items.length > 0);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className={`relative bg-white rounded-t-3xl w-full ${FRAME} p-5 pb-8 max-h-[70vh] flex flex-col`} onClick={(e) => e.stopPropagation()}>
+        <div className="w-10 h-1 rounded-full bg-[#E5E7EB] mx-auto mb-4" />
+        <h2 className="text-center text-[13px] font-bold uppercase tracking-[0.12em] text-[#9CA3AF] mb-2">Menu</h2>
+        <div className="overflow-y-auto -mx-1 px-1">
+          {visible.map(({ cat, items: catItems }) => {
+            const active = cat.id === activeCatId;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => onPick(cat.id)}
+                className="w-full flex items-center justify-between py-3 border-b border-[#F0F0F2] last:border-0 text-left"
+              >
+                <span
+                  className="text-[15px] font-semibold"
+                  style={{ color: active ? themeColor : "#1C1C2E" }}
+                >
+                  {cat.name}
+                </span>
+                <span className="flex items-center gap-2 text-[#9CA3AF]">
+                  <span className="text-sm font-medium tabular-nums">{catItems.length}</span>
+                  <ChevronRight size={16} />
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
