@@ -98,7 +98,21 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
   // Floating "MENU" jump-to-category sheet (Swiggy/Zomato style).
   const [catSheetOpen, setCatSheetOpen] = useState(false);
   const catTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Measure the sticky filter bar so category headers pin flush beneath it
+  // (no hardcoded offset → no gap/overlap as content scrolls under).
+  const navRef = useRef<HTMLDivElement | null>(null);
+  const [navH, setNavH] = useState(150);
   const supabase = createClient();
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const update = () => setNavH(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Debounce search — prevents re-filtering 200+ items on every keystroke.
   useEffect(() => {
@@ -421,7 +435,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
         </div>
 
         {/* Sticky filter bar */}
-        <div className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-[#E5E7EB] shadow-sm transition-all duration-300">
+        <div ref={navRef} className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-[#E5E7EB] shadow-sm transition-all duration-300">
           {/* Search */}
           <div className="px-4 pt-3 pb-2 relative">
             <Search size={16} className="absolute left-7 top-1/2 -translate-y-1/2 mt-1 text-[#9CA3AF]" />
@@ -519,17 +533,20 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
             filteredByCat.map(({ cat, items: catItems }, idx) => {
               if (catItems.length === 0) return null;
               return (
-                <div key={cat.id} id={`cat-${cat.id}`} className="scroll-mt-[156px]">
+                <div key={cat.id} id={`cat-${cat.id}`} style={{ scrollMarginTop: navH }}>
                   {/* Category header */}
-                  <div className="flex items-center justify-between px-4 pt-5 pb-2 sticky top-[156px] z-20 bg-white/85 backdrop-blur-md">
+                  <div
+                    className="flex items-center justify-between px-4 pt-5 pb-3 sticky z-20 bg-white/85 backdrop-blur-md"
+                    style={{ top: navH - 1 }}
+                  >
                     <h2 className="text-[17px] font-extrabold text-[#1C1C2E] tracking-tight">
                       {cat.name} <span className="text-[#9CA3AF] font-bold">({catItems.length})</span>
                     </h2>
                   </div>
 
-                  <div className="px-4">
+                  <div className="grid grid-cols-2 gap-3 px-4">
                     {catItems.map((item) => (
-                      <ItemRow
+                      <GridCard
                         key={item.id}
                         item={item}
                         themeColor={themeColor}
@@ -542,7 +559,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                     ))}
                   </div>
 
-                  {idx < filteredByCat.length - 1 && <div className="h-2 bg-[#F4F4F6] mt-3" />}
+                  {idx < filteredByCat.length - 1 && <div className="h-2 bg-[#F4F4F6] mt-5" />}
                 </div>
               );
             })
@@ -807,9 +824,9 @@ function AddPill({
   );
 }
 
-// Signature Swiggy/Zomato list row: details on the left, a square dish image on
-// the right with the ADD pill overlapping its lower edge.
-const ItemRow = memo(function ItemRow({
+// Compact 2-up grid card: image on top with the ADD pill straddling its lower
+// edge, details below. Two of these sit side-by-side per row.
+const GridCard = memo(function GridCard({
   item,
   themeColor,
   rating,
@@ -828,51 +845,47 @@ const ItemRow = memo(function ItemRow({
 }) {
   const longPress = useLongPress(onLongPress);
   const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
-  const hasImage = Boolean(item.image_url);
 
   return (
-    <div className="flex gap-3 py-4 border-b border-[#F0F0F2] last:border-0">
-      {/* Left — details */}
-      <div className="flex-1 min-w-0" {...longPress}>
-        <div className="flex items-center gap-2 mb-1.5">
-          <VegIndicator type={item.food_type} />
-          {item.badge && (
-            <span className="flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: themeColor }}>
-              <Star size={9} style={{ fill: themeColor, color: themeColor }} />
-              {item.badge}
-            </span>
-          )}
+    <motion.div
+      whileTap={{ scale: 0.97 }}
+      className="bg-white rounded-2xl border overflow-hidden flex flex-col shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
+      style={{ borderColor: qty > 0 ? themeColor : "#EDEDF0" }}
+    >
+      {/* Image + overlapping ADD pill */}
+      <div className="relative w-full aspect-square bg-[#F4F4F6]">
+        <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
+        {item.badge && (
+          <span
+            className="absolute top-2 left-2 flex items-center gap-0.5 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md"
+            style={{ backgroundColor: themeColor }}
+          >
+            <Star size={9} style={{ fill: "#fff", color: "#fff" }} />
+            {item.badge}
+          </span>
+        )}
+        <div className="absolute left-1/2 -translate-x-1/2 -bottom-3 w-[72%] max-w-[120px]">
+          <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
         </div>
-        <h3 className="text-[15px] font-semibold text-[#1C1C2E] leading-snug">{item.name}</h3>
+      </div>
+
+      {/* Details */}
+      <div className="px-2.5 pt-5 pb-3 flex flex-col flex-1" {...longPress}>
+        <div className="flex items-center gap-1.5">
+          <VegIndicator type={item.food_type} />
+          <h3 className="text-[13.5px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
+        </div>
         {rating && rating.count >= 3 && (
           <div className="mt-1.5">
             <RatingPill avg={avg} count={rating.count} />
           </div>
         )}
-        <p className="text-[15px] font-bold text-[#1C1C2E] mt-1.5">₹{item.price}</p>
         {item.description && (
-          <p className="text-xs text-[#6B7280] mt-1.5 leading-relaxed line-clamp-2">{item.description}</p>
+          <p className="text-[11px] text-[#6B7280] mt-1.5 leading-snug line-clamp-2">{item.description}</p>
         )}
+        <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{item.price}</p>
       </div>
-
-      {/* Right — image + ADD pill */}
-      <div className={`flex-shrink-0 ${hasImage ? "w-[116px]" : "w-[88px]"}`}>
-        {hasImage ? (
-          <div className="relative">
-            <motion.div whileTap={{ scale: 0.97 }} className="relative w-[116px] h-[116px] rounded-2xl overflow-hidden bg-[#F4F4F6]">
-              <DishImage item={item} themeColor={themeColor} sizes="116px" />
-            </motion.div>
-            <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 w-[92px]">
-              <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
-            </div>
-          </div>
-        ) : (
-          <div className="w-[88px] pt-1">
-            <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
-          </div>
-        )}
-      </div>
-    </div>
+    </motion.div>
   );
 });
 
