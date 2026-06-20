@@ -38,7 +38,8 @@ interface Props {
 export function BrandingForm({ hotel, initialSettings }: Props) {
   const [themeColor, setThemeColor] = useState(initialSettings?.theme_color ?? "#F97316");
   const [currency, setCurrency] = useState(initialSettings?.currency ?? "INR");
-  const [cancelMinutes, setCancelMinutes] = useState(initialSettings?.order_cancel_minutes ?? 5);
+  const [cancelEnabled, setCancelEnabled] = useState((initialSettings?.order_cancel_minutes ?? 0) > 0);
+  const [cancelMinutes, setCancelMinutes] = useState(initialSettings?.order_cancel_minutes || 5);
   const [menuLayout, setMenuLayout] = useState<"classic" | "modern">(initialSettings?.menu_layout ?? "classic");
   const [gstEnabled, setGstEnabled] = useState(initialSettings?.gst_enabled ?? false);
   const [gstPercent, setGstPercent] = useState(initialSettings?.gst_percent ?? 5);
@@ -80,10 +81,11 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
 
   async function handleSave() {
     setSaving(true);
+    const cancelValue = cancelEnabled ? cancelMinutes : 0;
     const base = { hotel_id: hotel.id, theme_color: themeColor, currency, logo_url: logoUrl, menu_layout: menuLayout };
     const full = {
       ...base,
-      order_cancel_minutes: cancelMinutes,
+      order_cancel_minutes: cancelValue,
       gst_enabled: gstEnabled,
       gst_percent: gstPercent,
       gst_number: gstNumber.trim() || null,
@@ -93,7 +95,7 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
     if (error && (error.code === "42703" || /column/i.test(error.message))) {
       ({ error } = await supabase
         .from("hotel_settings")
-        .upsert({ ...base, order_cancel_minutes: cancelMinutes }, { onConflict: "hotel_id" }));
+        .upsert({ ...base, order_cancel_minutes: cancelValue }, { onConflict: "hotel_id" }));
     }
     if (error && (error.code === "42703" || /order_cancel_minutes/i.test(error.message))) {
       ({ error } = await supabase.from("hotel_settings").upsert(base, { onConflict: "hotel_id" }));
@@ -244,21 +246,26 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
 
       {/* Order cancellation window */}
       <Card padding="lg">
-        <p className="text-sm font-semibold text-[#0F0E17] mb-1">Order cancellation window</p>
-        <p className="text-xs text-[#6B7280] mb-3">How long customers can cancel an order after placing it.</p>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            min={0}
-            max={60}
-            value={cancelMinutes}
-            onChange={(e) => setCancelMinutes(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
-            className="w-20 border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#0F0E17] focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
-          />
-          <span className="text-sm text-[#374151]">
-            minutes <span className="text-[#9CA3AF]">(0 disables cancellation)</span>
-          </span>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-sm font-semibold text-[#0F0E17]">Order cancellation window</p>
+          <Toggle checked={cancelEnabled} onChange={setCancelEnabled} />
         </div>
+        <p className="text-xs text-[#6B7280] mb-3">
+          When enabled, customers can cancel their own order for a short window after placing it. Off by default.
+        </p>
+        {cancelEnabled && (
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={cancelMinutes}
+              onChange={(e) => setCancelMinutes(Math.max(1, Math.min(60, parseInt(e.target.value) || 1)))}
+              className="w-20 border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#0F0E17] focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
+            />
+            <span className="text-sm text-[#374151]">minutes to cancel</span>
+          </div>
+        )}
       </Card>
 
       {/* Live preview */}

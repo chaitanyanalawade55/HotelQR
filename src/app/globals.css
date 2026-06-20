@@ -53,3 +53,27 @@ a,
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Smooth vertical swiping for the customer menu: keep momentum scrolling,
+   stop scroll-chaining rubber-band, and let the browser optimize touch panning. */
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scroll-behavior: smooth;
+}
+
+/* Promote an element to its own compositor layer so sticky bars (with
+   backdrop-blur) are composited instead of repainted on every scroll frame. */
+.gpu-layer {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Skip rendering work for off-screen menu sections while swiping — the browser
+   paints a section only as it nears the viewport, so flicking stays at 60fps
+   even with hundreds of dishes. The intrinsic size avoids scrollbar jumps. */
+.cv-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
+}

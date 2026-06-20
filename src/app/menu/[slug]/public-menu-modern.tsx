@@ -396,7 +396,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#15161F] flex justify-center">
+    <div className="min-h-screen w-full bg-[#15161F] flex justify-center smooth-scroll">
       {/* Mobile-width menu column */}
       <div
         className={`relative w-full ${FRAME} min-h-screen bg-white md:shadow-2xl`}
@@ -435,7 +435,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
         </div>
 
         {/* Sticky filter bar */}
-        <div ref={navRef} className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-[#E5E7EB] shadow-sm transition-all duration-300">
+        <div ref={navRef} className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-[#E5E7EB] shadow-sm transition-all duration-300 gpu-layer">
           {/* Search */}
           <div className="px-4 pt-3 pb-2 relative">
             <Search size={16} className="absolute left-7 top-1/2 -translate-y-1/2 mt-1 text-[#9CA3AF]" />
@@ -533,10 +533,10 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
             filteredByCat.map(({ cat, items: catItems }, idx) => {
               if (catItems.length === 0) return null;
               return (
-                <div key={cat.id} id={`cat-${cat.id}`} style={{ scrollMarginTop: navH }}>
+                <div key={cat.id} id={`cat-${cat.id}`} className="cv-section" style={{ scrollMarginTop: navH }}>
                   {/* Category header */}
                   <div
-                    className="flex items-center justify-between px-4 pt-5 pb-3 sticky z-20 bg-white/85 backdrop-blur-md"
+                    className="flex items-center justify-between px-4 pt-5 pb-3 sticky z-20 bg-white/85 backdrop-blur-md gpu-layer"
                     style={{ top: navH - 1 }}
                   >
                     <h2 className="text-[17px] font-extrabold text-[#1C1C2E] tracking-tight">
