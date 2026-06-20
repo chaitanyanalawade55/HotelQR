@@ -64,13 +64,19 @@ export function QRManager({ hotel, settings, initialTables }: Props) {
   const supabase = createClient();
 
   const themeColor = settings?.theme_color ?? "#F97316";
-  // Prefer the configured site URL, but fall back to the real browser origin so
-  // QR codes never point at localhost when the env var is unset.
-  const [siteUrl, setSiteUrl] = useState(process.env.NEXT_PUBLIC_SITE_URL ?? "");
+  // Canonical public domain that menu QR codes must always point at. Raw Vercel
+  // deployment URLs (e.g. hotelqr-xxxx.vercel.app) are access-protected and 404
+  // for guests, so we never want a QR encoding those.
+  const PROD_URL = "https://menu-qr-hotels.vercel.app";
+  const [siteUrl, setSiteUrl] = useState(process.env.NEXT_PUBLIC_SITE_URL || PROD_URL);
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SITE_URL && typeof window !== "undefined") {
-      setSiteUrl(window.location.origin);
-    }
+    // An explicit env override always wins; otherwise use localhost during dev
+    // and the canonical domain for any deployed host.
+    if (process.env.NEXT_PUBLIC_SITE_URL) return;
+    if (typeof window === "undefined") return;
+    const origin = window.location.origin;
+    const isLocal = origin.includes("localhost") || origin.includes("127.0.0.1");
+    setSiteUrl(isLocal ? origin : PROD_URL);
   }, []);
   const menuUrl = `${siteUrl}/menu/${hotel.slug}`;
 
