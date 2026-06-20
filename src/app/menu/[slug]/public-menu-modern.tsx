@@ -163,8 +163,13 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
     return items.filter((item) => item.is_special && matchesFilters(item, debouncedSearch, foodFilter));
   }, [items, debouncedSearch, foodFilter]);
 
-  // The pinned-first "Speciality" category the nudge popup points customers to.
+  // The pinned-first "Speciality" category the nudge popup points customers to,
+  // and the items inside it (already-configured specials, else the default Water).
   const specialCat = useMemo(() => categories.find((c) => /special/i.test(c.name)) ?? null, [categories]);
+  const specialtyItems = useMemo(
+    () => (specialCat ? items.filter((i) => i.category_id === specialCat.id && i.is_available !== false) : []),
+    [items, specialCat]
+  );
 
   const hasResults = useMemo(() => filteredByCat.some((g) => g.items.length > 0), [filteredByCat]);
 
@@ -673,7 +678,13 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
       <SpecialtyPopupPortal
         isEnabled={nudgeEnabled && Boolean(specialCat)}
         durationSeconds={nudgeSeconds}
-        onSpecialtyClick={openSpecial}
+        items={specialtyItems}
+        themeColor={themeColor}
+        onAdd={(id) => {
+          const it = items.find((i) => i.id === id);
+          if (it) addToCart(it);
+        }}
+        onViewMenu={openSpecial}
       />
 
       {/* Cart / order sheet */}

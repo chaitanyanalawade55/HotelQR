@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Search, X, Plus, Minus, Bell, Star, Sparkles, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
+import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
 import type { Hotel, HotelSettings, Category, MenuItem } from "@/types/database";
@@ -76,6 +77,8 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   const themeColor = settings?.theme_color ?? "#F97316";
   const themeLight = `${themeColor}26`;
   const cancelMinutes = settings?.order_cancel_minutes ?? 5;
+  const nudgeEnabled = settings?.special_nudge_enabled ?? true;
+  const nudgeSeconds = settings?.special_nudge_seconds ?? 5;
   const tableNumber = useMemo(() => tableNumberFromSlug(tableSlug), [tableSlug]);
   const orderKey = `order-${hotel.id}-${tableSlug}`;
 
@@ -158,6 +161,13 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   const specialItems = useMemo(() => {
     return items.filter((item) => item.is_special && matchesFilters(item, debouncedSearch, foodFilter));
   }, [items, debouncedSearch, foodFilter]);
+
+  // Pinned-first "Speciality" category + its items for the wipe-in nudge popup.
+  const specialCat = useMemo(() => categories.find((c) => /special/i.test(c.name)) ?? null, [categories]);
+  const specialtyItems = useMemo(
+    () => (specialCat ? items.filter((i) => i.category_id === specialCat.id && i.is_available !== false) : []),
+    [items, specialCat]
+  );
 
   const hasResults = useMemo(() => filteredByCat.some((g) => g.items.length > 0), [filteredByCat]);
 
@@ -668,6 +678,19 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
           onClose={() => setCatSheetOpen(false)}
         />
       )}
+
+      {/* Special-menu nudge — fully isolated portal, renders above the MENU button. */}
+      <SpecialtyPopupPortal
+        isEnabled={nudgeEnabled && Boolean(specialCat)}
+        durationSeconds={nudgeSeconds}
+        items={specialtyItems}
+        themeColor={themeColor}
+        onAdd={(id) => {
+          const it = items.find((i) => i.id === id);
+          if (it) addToCart(it);
+        }}
+        onViewMenu={() => specialCat && selectCat(specialCat.id)}
+      />
 
       {/* Rating bottom sheet */}
       {ratingItem && (

@@ -15,6 +15,11 @@ const sb = createClient(
       .select("id,name,sort_order,is_active")
       .eq("hotel_id", h.id)
       .order("sort_order");
+    const { data: st } = await sb
+      .from("hotel_settings")
+      .select("special_nudge_enabled,special_nudge_seconds,menu_layout")
+      .eq("hotel_id", h.id)
+      .maybeSingle();
     const spec = (cats || []).find((c) => /special/i.test(c.name));
     let waterInfo = "NO SPECIALITY CATEGORY";
     if (spec) {
@@ -24,7 +29,7 @@ const sb = createClient(
         .eq("category_id", spec.id);
       waterInfo = JSON.stringify(items);
     }
-    console.log(`\n[${h.slug}] ${h.name}`);
+    console.log(`\n[${h.slug}] ${h.name}  settings:`, JSON.stringify(st));
     console.log("  cats:", (cats || []).map((c) => `${c.name}(so=${c.sort_order},act=${c.is_active})`).join(" | "));
     console.log("  spec items:", waterInfo);
   }
