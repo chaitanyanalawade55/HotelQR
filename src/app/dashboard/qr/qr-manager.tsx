@@ -64,7 +64,14 @@ export function QRManager({ hotel, settings, initialTables }: Props) {
   const supabase = createClient();
 
   const themeColor = settings?.theme_color ?? "#F97316";
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  // Prefer the configured site URL, but fall back to the real browser origin so
+  // QR codes never point at localhost when the env var is unset.
+  const [siteUrl, setSiteUrl] = useState(process.env.NEXT_PUBLIC_SITE_URL ?? "");
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SITE_URL && typeof window !== "undefined") {
+      setSiteUrl(window.location.origin);
+    }
+  }, []);
   const menuUrl = `${siteUrl}/menu/${hotel.slug}`;
 
   useQRCanvas(mainCanvasRef, menuUrl, themeColor, 200);
@@ -193,6 +200,7 @@ export function QRManager({ hotel, settings, initialTables }: Props) {
                 table={table}
                 themeColor={themeColor}
                 siteUrl={siteUrl}
+                hotelName={hotel.name}
                 onDelete={() => deleteTable(table.id)}
               />
             ))}
@@ -207,17 +215,33 @@ function TableQRCard({
   table,
   themeColor,
   siteUrl,
+  hotelName,
   onDelete,
 }: {
   table: TableQR;
   themeColor: string;
   siteUrl: string;
+  hotelName: string;
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const url = `${siteUrl}/menu/${table.qr_slug}`;
 
   useQRCanvas(ref, url, themeColor, 120);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(url);
+    toast.success("Link copied to clipboard");
+  }
+
+  async function handleShare() {
+    if (navigator.share) {
+      await navigator.share({ title: `${hotelName} — Table ${table.table_number}`, url });
+    } else {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard");
+    }
+  }
 
   return (
     <div className="border border-[#E5E7EB] rounded-3xl p-4">
@@ -245,6 +269,14 @@ function TableQRCard({
             onClick={() => downloadSVG(url, `table-${table.table_number}-qr.svg`, themeColor)}
           >
             SVG
+          </Button>
+        </div>
+        <div className="flex gap-2 mt-2">
+          <Button variant="secondary" size="sm" icon={<Copy size={12} />} onClick={handleCopy}>
+            Copy link
+          </Button>
+          <Button variant="secondary" size="sm" icon={<Share2 size={12} />} onClick={handleShare}>
+            Share
           </Button>
         </div>
       </div>
