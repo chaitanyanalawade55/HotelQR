@@ -570,8 +570,10 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
         <p className="text-center text-xs text-[#9CA3AF] py-4">Powered by MenuQR</p>
       </div>
 
-      {/* Fixed controls, aligned to the mobile frame */}
-      <div className={`fixed inset-0 z-40 mx-auto w-full ${FRAME} pointer-events-none`}>
+      {/* Fixed controls, aligned to the mobile frame. gpu-layer composites the
+          overlay so the floating Call/MENU buttons stay pinned instead of
+          jittering as the mobile address bar shows/hides on scroll. */}
+      <div className={`fixed inset-0 z-40 mx-auto w-full ${FRAME} pointer-events-none gpu-layer`}>
         {/* Waiter call button */}
         <button
           onClick={callWaiter}
