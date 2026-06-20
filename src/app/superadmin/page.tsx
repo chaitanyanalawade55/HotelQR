@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, GitCommit, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { SuperAdminHeader } from "./superadmin-header";
+import { BUILD_SHA, BUILD_TIME } from "@/lib/build-info";
+import { relativeTime, formatDateTime } from "@/lib/relativeTime";
 import type { Hotel } from "@/types/database";
 
 const statusStyle: Record<string, string> = {
@@ -22,17 +24,29 @@ export default async function SuperAdminPage() {
   if (!isSuper) redirect("/dashboard");
 
   // RLS (migration 0008) lets a super admin read across all hotels.
-  const [hotelsRes, ordersCountRes, itemsCountRes] = await Promise.all([
+  const [hotelsRes, ordersCountRes, itemsCountRes, itemTimesRes] = await Promise.all([
     supabase
       .from("hotels")
-      .select("id,name,slug,owner_email,phone,status,created_at")
+      .select("id,name,slug,owner_email,phone,status,created_at,updated_at")
       .order("created_at", { ascending: false }),
     supabase.from("orders").select("*", { count: "exact", head: true }),
     supabase.from("menu_items").select("*", { count: "exact", head: true }),
+    supabase.from("menu_items").select("hotel_id,updated_at"),
   ]);
 
   const hotels = (hotelsRes.data as Hotel[]) ?? [];
   const activeCount = hotels.filter((h) => h.status === "active").length;
+
+  // Most-recent menu edit per hotel → combined with profile changes gives each
+  // hotel's "last admin update". One pass, newest wins.
+  const lastMenuEdit = new Map<string, string>();
+  for (const row of (itemTimesRes.data as { hotel_id: string; updated_at: string }[] | null) ?? []) {
+    if (!row.updated_at) continue;
+    const prev = lastMenuEdit.get(row.hotel_id);
+    if (!prev || row.updated_at > prev) lastMenuEdit.set(row.hotel_id, row.updated_at);
+  }
+  const lastAdminUpdate = (h: Hotel) =>
+    [h.updated_at, lastMenuEdit.get(h.id)].filter(Boolean).sort().at(-1) ?? null;
 
   const stats = [
     { label: "Hotels", value: hotels.length },
@@ -56,6 +70,26 @@ export default async function SuperAdminPage() {
           ))}
         </div>
 
+        {/* System monitoring — deployment is global (one Vercel build serves
+            every hotel), so the version/time are shown once here. */}
+        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-7">
+          <p className="text-sm font-semibold text-[#0F0E17] mb-3">System monitoring</p>
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <div className="flex items-center gap-2">
+              <GitCommit size={15} className="text-[#6B7280]" />
+              <span className="text-xs text-[#6B7280]">Live production version</span>
+              <span className="font-mono text-[11px] bg-white border border-[#E5E7EB] text-[#374151] px-2 py-0.5 rounded-md">
+                {BUILD_SHA}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock size={15} className="text-[#6B7280]" />
+              <span className="text-xs text-[#6B7280]">Build timestamp</span>
+              <span className="text-xs font-medium text-[#0F0E17]">{formatDateTime(BUILD_TIME)}</span>
+            </div>
+          </div>
+        </div>
+
         <h2 className="text-sm font-semibold text-[#0F0E17] mb-3">All hotels</h2>
         <div className="space-y-3">
           {hotels.map((h) => (
@@ -74,6 +108,9 @@ export default async function SuperAdminPage() {
                   {h.phone && <p className="text-xs text-[#9CA3AF] mt-0.5">{h.phone}</p>}
                   <p className="text-[11px] text-[#9CA3AF] mt-1">
                     /{h.slug} · joined {new Date(h.created_at).toLocaleDateString()}
+                  </p>
+                  <p className="text-[11px] text-[#6B7280] mt-1">
+                    Updated {relativeTime(lastAdminUpdate(h))}
                   </p>
                 </div>
                 <Link

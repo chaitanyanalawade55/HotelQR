@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { SystemStatusCard } from "./SystemStatusCard";
 
 const GEMINI_KEY = "gemini_api_key";
 
@@ -181,6 +182,8 @@ export default function SettingsPage() {
           API calls go directly from your browser to Google.
         </p>
       </Card>
+
+      <SystemStatusCard />
     </div>
   );
 }

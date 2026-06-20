@@ -8,6 +8,14 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false, // hide X-Powered-By: Next.js
 
+  // ── Build telemetry — inlined at build time, readable on client & server.
+  //    On Vercel, VERCEL_GIT_COMMIT_SHA is the deployed commit; build time is
+  //    when this config is evaluated (i.e. the deployment build).
+  env: {
+    NEXT_PUBLIC_BUILD_SHA: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7),
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+  },
+
   // ── Image optimization (mobile-first — QR scan = always phone) ──
   images: {
     remotePatterns: [
