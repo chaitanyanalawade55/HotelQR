@@ -25,6 +25,8 @@ export type HotelSettings = {
   gst_enabled: boolean;
   gst_percent: number;
   gst_number: string | null;
+  special_nudge_enabled: boolean;
+  special_nudge_seconds: number;
 };
 
 export type Category = {

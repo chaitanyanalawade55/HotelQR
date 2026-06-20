@@ -77,6 +77,8 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
   const themeColor = settings?.theme_color ?? "#F97316";
   const themeLight = `${themeColor}26`;
   const cancelMinutes = settings?.order_cancel_minutes ?? 5;
+  const nudgeEnabled = settings?.special_nudge_enabled ?? true;
+  const nudgeSeconds = settings?.special_nudge_seconds ?? 5;
   const tableNumber = useMemo(() => tableNumberFromSlug(tableSlug), [tableSlug]);
   const orderKey = `order-${hotel.id}-${tableSlug}`;
 
@@ -97,6 +99,8 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
   const [statusOpen, setStatusOpen] = useState(false);
   // Floating "MENU" jump-to-category sheet (Swiggy/Zomato style).
   const [catSheetOpen, setCatSheetOpen] = useState(false);
+  // One-shot wipe-in nudge that points first-time scanners at the special menu.
+  const [nudgeOpen, setNudgeOpen] = useState(false);
   const catTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   // Measure the sticky filter bar so category headers pin flush beneath it
   // (no hardcoded offset → no gap/overlap as content scrolls under).
@@ -160,6 +164,21 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
     return items.filter((item) => item.is_special && matchesFilters(item, debouncedSearch, foodFilter));
   }, [items, debouncedSearch, foodFilter]);
 
+  // The pinned-first "Speciality" category the nudge popup points customers to.
+  const specialCat = useMemo(() => categories.find((c) => /special/i.test(c.name)) ?? null, [categories]);
+
+  // Show the wipe-in nudge shortly after the menu opens, then auto-dismiss it
+  // after the owner-configured window (× lets the customer close it sooner).
+  useEffect(() => {
+    if (!nudgeEnabled || !specialCat) return;
+    const show = setTimeout(() => setNudgeOpen(true), 500);
+    const hide = setTimeout(() => setNudgeOpen(false), 500 + Math.max(1, nudgeSeconds) * 1000);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(hide);
+    };
+  }, [nudgeEnabled, specialCat, nudgeSeconds]);
+
   const hasResults = useMemo(() => filteredByCat.some((g) => g.items.length > 0), [filteredByCat]);
 
   // Load rating aggregates after mount (non-blocking — menu renders instantly).
@@ -207,6 +226,12 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
     setActiveCatId(catId);
     document.getElementById(`cat-${catId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     catTabRefs.current[catId]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }
+
+  // Tapping the nudge jumps straight to the special menu and dismisses the popup.
+  function openSpecial() {
+    setNudgeOpen(false);
+    if (specialCat) selectCat(specialCat.id);
   }
 
   const addToCart = useCallback((item: MenuItem) => {
@@ -586,6 +611,35 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
         >
           <Bell size={22} style={{ color: themeColor }} />
         </button>
+
+        {/* Special-menu nudge — wipes in just above the MENU button, then
+            auto-dismisses. Hidden once the customer engages (cart / order open). */}
+        <AnimatePresence>
+          {nudgeOpen && specialCat && cartCount === 0 && !statusOpen && !cartOpen && (
+            <motion.div
+              key="special-nudge"
+              initial={{ clipPath: "inset(0 100% 0 0)", opacity: 0 }}
+              animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
+              exit={{ clipPath: "inset(0 100% 0 0)", opacity: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-[86px] flex items-center gap-1 rounded-full pl-4 pr-1.5 py-1.5 shadow-xl whitespace-nowrap"
+              style={{ backgroundColor: themeColor }}
+            >
+              <button onClick={openSpecial} className="flex items-center gap-2 text-white min-h-0">
+                <Sparkles size={15} className="text-white" />
+                <span className="text-sm font-bold tracking-wide">Our Today&apos;s Special Menu</span>
+                <ChevronRight size={16} className="text-white" />
+              </button>
+              <button
+                onClick={() => setNudgeOpen(false)}
+                aria-label="Dismiss"
+                className="ml-0.5 w-6 h-6 rounded-full bg-white/25 flex items-center justify-center min-h-0 min-w-0 p-0"
+              >
+                <X size={13} className="text-white" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Floating MENU button — jump to any category (Swiggy/Zomato style) */}
         {categories.length > 1 && (

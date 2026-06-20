@@ -44,6 +44,8 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
   const [gstEnabled, setGstEnabled] = useState(initialSettings?.gst_enabled ?? false);
   const [gstPercent, setGstPercent] = useState(initialSettings?.gst_percent ?? 5);
   const [gstNumber, setGstNumber] = useState(initialSettings?.gst_number ?? "");
+  const [nudgeEnabled, setNudgeEnabled] = useState(initialSettings?.special_nudge_enabled ?? true);
+  const [nudgeSeconds, setNudgeSeconds] = useState(initialSettings?.special_nudge_seconds ?? 5);
   const [logoUrl, setLogoUrl] = useState(initialSettings?.logo_url ?? null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,6 +91,8 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
       gst_enabled: gstEnabled,
       gst_percent: gstPercent,
       gst_number: gstNumber.trim() || null,
+      special_nudge_enabled: nudgeEnabled,
+      special_nudge_seconds: nudgeSeconds,
     };
     let { error } = await supabase.from("hotel_settings").upsert(full, { onConflict: "hotel_id" });
     // Fall back progressively if newer columns haven't been migrated yet.
@@ -264,6 +268,30 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
               className="w-20 border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#0F0E17] focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
             />
             <span className="text-sm text-[#374151]">minutes to cancel</span>
+          </div>
+        )}
+      </Card>
+
+      {/* Special-menu nudge popup */}
+      <Card padding="lg">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-sm font-semibold text-[#0F0E17]">Special menu popup</p>
+          <Toggle checked={nudgeEnabled} onChange={setNudgeEnabled} />
+        </div>
+        <p className="text-xs text-[#6B7280] mb-3">
+          When enabled, a popup wipes in when customers open your menu, nudging them to your Speciality section. It auto-dismisses after the time below.
+        </p>
+        {nudgeEnabled && (
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={nudgeSeconds}
+              onChange={(e) => setNudgeSeconds(Math.max(1, Math.min(30, parseInt(e.target.value) || 1)))}
+              className="w-20 border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#0F0E17] focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent"
+            />
+            <span className="text-sm text-[#374151]">seconds on screen</span>
           </div>
         )}
       </Card>

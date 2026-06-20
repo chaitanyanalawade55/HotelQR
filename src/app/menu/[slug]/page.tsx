@@ -87,7 +87,7 @@ export default async function PublicMenuPage({ params }: PageProps) {
       .order("sort_order"),
     supabase
       .from("hotel_settings")
-      .select("logo_url,theme_color,currency,order_cancel_minutes")
+      .select("logo_url,theme_color,currency,order_cancel_minutes,special_nudge_enabled,special_nudge_seconds")
       .eq("hotel_id", hotel.id)
       .single(),
   ]);
