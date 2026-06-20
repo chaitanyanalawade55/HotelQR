@@ -40,7 +40,7 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
   const [currency, setCurrency] = useState(initialSettings?.currency ?? "INR");
   const [cancelEnabled, setCancelEnabled] = useState((initialSettings?.order_cancel_minutes ?? 0) > 0);
   const [cancelMinutes, setCancelMinutes] = useState(initialSettings?.order_cancel_minutes || 5);
-  const [menuLayout, setMenuLayout] = useState<"classic" | "modern">(initialSettings?.menu_layout ?? "classic");
+  const [menuLayout, setMenuLayout] = useState<"classic" | "modern" | "premium">(initialSettings?.menu_layout ?? "classic");
   const [gstEnabled, setGstEnabled] = useState(initialSettings?.gst_enabled ?? false);
   const [gstPercent, setGstPercent] = useState(initialSettings?.gst_percent ?? 5);
   const [gstNumber, setGstNumber] = useState(initialSettings?.gst_number ?? "");
@@ -246,6 +246,23 @@ export function BrandingForm({ hotel, initialSettings }: Props) {
             <p className="text-[11px] text-[#6B7280]">Sleek animations, glassmorphism, optimized for ordering.</p>
           </button>
         </div>
+
+        {/* Premium (beta) — full-width, the home for the latest features. */}
+        <button
+          onClick={() => setMenuLayout("premium")}
+          className={`mt-3 w-full border rounded-2xl p-4 text-left transition-all relative overflow-hidden ${
+            menuLayout === "premium" ? "border-[#7C3AED] bg-[#F5F3FF]" : "border-[#E5E7EB] bg-white hover:border-[#7C3AED]/50"
+          }`}
+        >
+          <div className="absolute top-0 right-0 bg-[#7C3AED] text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">
+            Beta
+          </div>
+          <p className="text-sm font-semibold text-[#0F0E17] mb-1">Modernized Premium Menu View</p>
+          <p className="text-[11px] text-[#6B7280]">
+            Compact, high-density cards so guests see more dishes at a glance, an always-on Speciality bar, and the
+            latest features first. Best for premium hotels.
+          </p>
+        </button>
       </Card>
 
       {/* Order cancellation window */}

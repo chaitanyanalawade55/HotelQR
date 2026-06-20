@@ -34,6 +34,8 @@ interface SpecialtyPopupPortalProps {
   onAdd?: (itemId: string) => void;
   /** Optional: jump to the speciality section in the underlying menu. */
   onViewMenu?: () => void;
+  /** Premium view: keep the bar always present (no auto-dismiss, no × ). */
+  persistent?: boolean;
 }
 
 // Hardware-accelerated left-to-right wipe in, wipe out to the right.
@@ -66,6 +68,7 @@ export function SpecialtyPopupPortal({
   currencySymbol = "₹",
   onAdd,
   onViewMenu,
+  persistent = false,
 }: SpecialtyPopupPortalProps) {
   // Portals can only target document.body after the client has mounted.
   const [mounted, setMounted] = useState(false);
@@ -74,17 +77,18 @@ export function SpecialtyPopupPortal({
 
   useEffect(() => setMounted(true), []);
 
-  // Show the bar shortly after mount, then auto-dismiss after the owner window.
-  // (Tapping it opens the sheet, which is independent of this timer.)
+  // Show the bar shortly after mount. In the standard view it auto-dismisses
+  // after the owner window; in the premium view it stays put (always present).
   useEffect(() => {
     if (!isEnabled) return;
     const showTimer = setTimeout(() => setBarVisible(true), 500);
+    if (persistent) return () => clearTimeout(showTimer);
     const hideTimer = setTimeout(() => setBarVisible(false), 500 + Math.max(1, durationSeconds) * 1000);
     return () => {
       clearTimeout(showTimer);
       clearTimeout(hideTimer);
     };
-  }, [isEnabled, durationSeconds]);
+  }, [isEnabled, durationSeconds, persistent]);
 
   if (!mounted || !isEnabled) return null;
 
@@ -125,13 +129,15 @@ export function SpecialtyPopupPortal({
                 <ChevronRight size={18} style={{ color: themeColor }} className="shrink-0" />
               </button>
 
-              <button
-                onClick={() => setBarVisible(false)}
-                aria-label="Dismiss"
-                className="w-6 h-6 rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center shrink-0 min-h-0 min-w-0 p-0"
-              >
-                <X size={13} />
-              </button>
+              {!persistent && (
+                <button
+                  onClick={() => setBarVisible(false)}
+                  aria-label="Dismiss"
+                  className="w-6 h-6 rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center shrink-0 min-h-0 min-w-0 p-0"
+                >
+                  <X size={13} />
+                </button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

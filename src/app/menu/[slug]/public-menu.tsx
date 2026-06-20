@@ -11,6 +11,11 @@ interface Props {
 }
 
 export function PublicMenu(props: Props) {
+  // "Modernized Premium Menu View" — the modern engine in its compact, premium
+  // variant (denser cards, always-on Speciality bar, latest features).
+  if (props.settings?.menu_layout === "premium") {
+    return <PublicMenuModern {...props} premium />;
+  }
   if (props.settings?.menu_layout === "modern") {
     return <PublicMenuModern {...props} />;
   }

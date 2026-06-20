@@ -31,6 +31,8 @@ interface Props {
   categories: Category[];
   items: MenuItem[];
   tableSlug: string;
+  /** "Modernized Premium Menu View": compact row cards + always-on Speciality bar. */
+  premium?: boolean;
 }
 
 type FoodFilter = "all" | "veg" | "non_veg";
@@ -74,7 +76,7 @@ function tableNumberFromSlug(slug: string): string | null {
   return after || null;
 }
 
-export function PublicMenuModern({ hotel, settings, categories, items: initialItems, tableSlug }: Props) {
+export function PublicMenuModern({ hotel, settings, categories, items: initialItems, tableSlug, premium = false }: Props) {
   const themeColor = settings?.theme_color ?? "#F97316";
   const themeLight = `${themeColor}26`;
   const cancelMinutes = settings?.order_cancel_minutes ?? 5;
@@ -560,20 +562,38 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                     </h2>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 px-4">
-                    {catItems.map((item) => (
-                      <GridCard
-                        key={item.id}
-                        item={item}
-                        themeColor={themeColor}
-                        rating={ratings[item.id]}
-                        qty={cartQty[item.id] ?? 0}
-                        onAdd={() => addToCart(item)}
-                        onDec={() => changeQty(item.id, -1)}
-                        onLongPress={() => setRatingItem(item)}
-                      />
-                    ))}
-                  </div>
+                  {premium ? (
+                    // Compact rows — fit far more dishes on screen in one go.
+                    <div className="px-4 divide-y divide-[#F0F0F2]">
+                      {catItems.map((item) => (
+                        <RowCard
+                          key={item.id}
+                          item={item}
+                          themeColor={themeColor}
+                          rating={ratings[item.id]}
+                          qty={cartQty[item.id] ?? 0}
+                          onAdd={() => addToCart(item)}
+                          onDec={() => changeQty(item.id, -1)}
+                          onLongPress={() => setRatingItem(item)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 px-4">
+                      {catItems.map((item) => (
+                        <GridCard
+                          key={item.id}
+                          item={item}
+                          themeColor={themeColor}
+                          rating={ratings[item.id]}
+                          qty={cartQty[item.id] ?? 0}
+                          onAdd={() => addToCart(item)}
+                          onDec={() => changeQty(item.id, -1)}
+                          onLongPress={() => setRatingItem(item)}
+                        />
+                      ))}
+                    </div>
+                  )}
 
                   {idx < filteredByCat.length - 1 && <div className="h-2 bg-[#F4F4F6] mt-5" />}
                 </div>
@@ -678,6 +698,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
       <SpecialtyPopupPortal
         isEnabled={nudgeEnabled && Boolean(specialCat)}
         durationSeconds={nudgeSeconds}
+        persistent={premium}
         items={specialtyItems}
         themeColor={themeColor}
         onAdd={(id) => {
@@ -915,6 +936,67 @@ const GridCard = memo(function GridCard({
           <p className="text-[11px] text-[#6B7280] mt-1.5 leading-snug line-clamp-2">{item.description}</p>
         )}
         <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{item.price}</p>
+      </div>
+    </motion.div>
+  );
+});
+
+// Compact list row for the premium view — thumbnail left, details centre, a
+// small ADD control right. Far denser than the 2-up grid, so the customer sees
+// many more dishes per screen.
+const RowCard = memo(function RowCard({
+  item,
+  themeColor,
+  rating,
+  qty,
+  onAdd,
+  onDec,
+  onLongPress,
+}: {
+  item: MenuItem;
+  themeColor: string;
+  rating?: { sum: number; count: number };
+  qty: number;
+  onAdd: () => void;
+  onDec: () => void;
+  onLongPress: () => void;
+}) {
+  const longPress = useLongPress(onLongPress);
+  const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
+
+  return (
+    <motion.div whileTap={{ scale: 0.99 }} className="flex gap-3 py-3">
+      <div className="relative w-[78px] h-[78px] rounded-xl overflow-hidden bg-[#F4F4F6] shrink-0" {...longPress}>
+        <DishImage item={item} themeColor={themeColor} sizes="78px" />
+        {item.badge && (
+          <span
+            className="absolute top-1 left-1 flex items-center gap-0.5 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md"
+            style={{ backgroundColor: themeColor }}
+          >
+            <Star size={8} style={{ fill: "#fff", color: "#fff" }} />
+            {item.badge}
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0 flex flex-col" {...longPress}>
+        <div className="flex items-center gap-1.5">
+          <VegIndicator type={item.food_type} />
+          <h3 className="text-[14px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
+        </div>
+        {rating && rating.count >= 3 && (
+          <div className="mt-1">
+            <RatingPill avg={avg} count={rating.count} />
+          </div>
+        )}
+        {item.description && (
+          <p className="text-[11px] text-[#6B7280] mt-0.5 leading-snug line-clamp-1">{item.description}</p>
+        )}
+        <p className="text-[14px] font-bold text-[#1C1C2E] mt-auto pt-1">₹{item.price}</p>
+      </div>
+
+      <div className="w-[88px] shrink-0 self-center">
+        <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
       </div>
     </motion.div>
   );

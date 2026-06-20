@@ -21,7 +21,7 @@ export type HotelSettings = {
   default_language: string;
   subscription_tier: "basic" | "pro" | "enterprise";
   order_cancel_minutes: number;
-  menu_layout: "classic" | "modern";
+  menu_layout: "classic" | "modern" | "premium";
   gst_enabled: boolean;
   gst_percent: number;
   gst_number: string | null;
