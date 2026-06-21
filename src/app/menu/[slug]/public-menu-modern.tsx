@@ -2,7 +2,7 @@
 import { useState, useRef, useMemo, useEffect, useCallback, memo } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, Plus, Minus, Bell, Star, Sparkles, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
+import { Search, X, Plus, Minus, Bell, Star, Sparkles, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
@@ -519,9 +519,22 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
           {/* Specials — premium horizontal carousel */}
           {specialItems.length > 0 && (
             <div className="pt-5 pb-2">
-              <div className="flex items-center gap-1.5 px-4 mb-3">
-                <Sparkles size={17} style={{ color: themeColor }} />
-                <span className="text-[16px] font-extrabold text-[#1C1C2E] tracking-tight">Our Specials</span>
+              {/* Section header */}
+              <div className="px-4 mb-3.5">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <div
+                    className="w-[26px] h-[26px] rounded-lg flex items-center justify-center shadow-sm"
+                    style={{ background: "linear-gradient(135deg, #F59E0B 0%, #EA580C 100%)" }}
+                  >
+                    <ChefHat size={14} className="text-white" />
+                  </div>
+                  <span className="text-[17px] font-extrabold text-[#1C1C2E] tracking-tight">
+                    Chef&apos;s Signature
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-[#9CA3AF] ml-[34px] leading-tight">
+                  Handpicked today&apos;s finest dishes
+                </p>
               </div>
               <div className="flex gap-3.5 overflow-x-auto scrollbar-hide px-4 pb-1 snap-x">
                 {specialItems.map((item) => (
@@ -1023,25 +1036,45 @@ const SpecialCard = memo(function SpecialCard({
   const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
   return (
     <div className="flex-shrink-0 w-[168px] snap-start">
-      <motion.div whileTap={{ scale: 0.97 }} className="relative w-full aspect-square rounded-3xl overflow-hidden bg-[#F4F4F6] shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+      {/* Image tile */}
+      <motion.div
+        whileTap={{ scale: 0.96 }}
+        transition={{ type: "spring", stiffness: 400, damping: 22 }}
+        className="relative w-full aspect-square rounded-3xl overflow-hidden bg-amber-50"
+        style={{
+          boxShadow: "0 12px_40px rgba(180,83,9,0.16), 0 4px 12px rgba(0,0,0,0.06)",
+          border: "1.5px solid rgba(245,158,11,0.18)",
+        }}
+      >
         <DishImage item={item} themeColor={themeColor} sizes="168px" />
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent" />
-        <span
-          className="absolute top-2.5 left-2.5 flex items-center gap-1 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md backdrop-blur-sm"
-          style={{ backgroundColor: `${themeColor}E6` }}
+
+        {/* Warm scrim — deeper amber tint at bottom */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#7C2D12]/72 via-[#92400E]/18 to-transparent" />
+
+        {/* Chef's Pick badge */}
+        <div
+          className="absolute top-2.5 left-2.5 flex items-center gap-[5px] text-white text-[10px] font-bold px-2 py-[5px] rounded-full shadow-[0_3px_10px_rgba(180,83,9,0.5)]"
+          style={{ background: "linear-gradient(135deg, #D97706 0%, #EA580C 100%)" }}
         >
-          <Sparkles size={10} /> SPECIAL
-        </span>
+          <ChefHat size={9} />
+          Chef&apos;s Pick
+        </div>
+
+        {/* Veg dot + name overlay */}
         <div className="absolute bottom-2.5 left-2.5 right-2.5">
           <div className="flex items-center gap-1.5">
             <VegIndicator type={item.food_type} />
-            <span className="text-white text-sm font-bold leading-tight line-clamp-1 drop-shadow">{item.name}</span>
+            <span className="text-white text-[13px] font-bold leading-tight line-clamp-1 drop-shadow-lg">
+              {item.name}
+            </span>
           </div>
         </div>
       </motion.div>
+
+      {/* Price + rating + add control */}
       <div className="flex items-center justify-between gap-2 mt-2.5 px-0.5" {...longPress}>
         <div className="min-w-0">
-          <p className="text-[15px] font-bold text-[#1C1C2E] leading-none">₹{item.price}</p>
+          <p className="text-[15px] font-extrabold text-amber-800 leading-none">₹{item.price}</p>
           {rating && rating.count >= 3 && (
             <div className="mt-1.5">
               <RatingPill avg={avg} count={rating.count} />
