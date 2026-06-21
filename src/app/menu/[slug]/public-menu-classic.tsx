@@ -162,12 +162,17 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
     return items.filter((item) => item.is_special && matchesFilters(item, debouncedSearch, foodFilter));
   }, [items, debouncedSearch, foodFilter]);
 
-  // Pinned-first "Speciality" category + its items for the wipe-in nudge popup.
+  // Optional "Speciality" category (name contains "special") for jump navigation.
   const specialCat = useMemo(() => categories.find((c) => /special/i.test(c.name)) ?? null, [categories]);
-  const specialtyItems = useMemo(
-    () => (specialCat ? items.filter((i) => i.category_id === specialCat.id && i.is_available !== false) : []),
-    [items, specialCat]
-  );
+
+  // Items shown in the popup: prefer named Specials category, else any is_special item.
+  const specialtyItems = useMemo(() => {
+    const fromCat = specialCat
+      ? items.filter((i) => i.category_id === specialCat.id && i.is_available !== false)
+      : [];
+    if (fromCat.length > 0) return fromCat;
+    return items.filter((i) => i.is_special && i.is_available !== false);
+  }, [items, specialCat]);
 
   const hasResults = useMemo(() => filteredByCat.some((g) => g.items.length > 0), [filteredByCat]);
 
@@ -681,8 +686,9 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
 
       {/* Special-menu nudge — fully isolated portal, renders above the MENU button. */}
       <SpecialtyPopupPortal
-        isEnabled={nudgeEnabled && Boolean(specialCat)}
+        isEnabled={nudgeEnabled && specialtyItems.length > 0}
         durationSeconds={nudgeSeconds}
+        persistent={true}
         items={specialtyItems}
         themeColor={themeColor}
         onAdd={(id) => {

@@ -165,13 +165,19 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
     return items.filter((item) => item.is_special && matchesFilters(item, debouncedSearch, foodFilter));
   }, [items, debouncedSearch, foodFilter]);
 
-  // The pinned-first "Speciality" category the nudge popup points customers to,
-  // and the items inside it (already-configured specials, else the default Water).
+  // Optional "Speciality" category (name contains "special") for jump navigation.
   const specialCat = useMemo(() => categories.find((c) => /special/i.test(c.name)) ?? null, [categories]);
-  const specialtyItems = useMemo(
-    () => (specialCat ? items.filter((i) => i.category_id === specialCat.id && i.is_available !== false) : []),
-    [items, specialCat]
-  );
+
+  // Items to show in the popup: prefer a dedicated "Specials" category if it
+  // exists, otherwise fall back to any item marked is_special=true. This means
+  // the nudge works even for hotels that don't have a named special category.
+  const specialtyItems = useMemo(() => {
+    const fromCat = specialCat
+      ? items.filter((i) => i.category_id === specialCat.id && i.is_available !== false)
+      : [];
+    if (fromCat.length > 0) return fromCat;
+    return items.filter((i) => i.is_special && i.is_available !== false);
+  }, [items, specialCat]);
 
   const hasResults = useMemo(() => filteredByCat.some((g) => g.items.length > 0), [filteredByCat]);
 
@@ -696,9 +702,9 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
 
       {/* Special-menu nudge — fully isolated portal, renders above the MENU button. */}
       <SpecialtyPopupPortal
-        isEnabled={nudgeEnabled && Boolean(specialCat)}
+        isEnabled={nudgeEnabled && specialtyItems.length > 0}
         durationSeconds={nudgeSeconds}
-        persistent={premium}
+        persistent={true}
         items={specialtyItems}
         themeColor={themeColor}
         onAdd={(id) => {
