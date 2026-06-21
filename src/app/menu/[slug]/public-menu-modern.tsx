@@ -707,10 +707,9 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
         persistent={true}
         items={specialtyItems}
         themeColor={themeColor}
-        onAdd={(id) => {
-          const it = items.find((i) => i.id === id);
-          if (it) addToCart(it);
-        }}
+        cartQty={cartQty}
+        onAdd={(id) => { const it = items.find((i) => i.id === id); if (it) addToCart(it); }}
+        onRemove={(id) => changeQty(id, -1)}
         onViewMenu={openSpecial}
       />
 
