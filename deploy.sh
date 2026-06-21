@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-timestamp=$(TZ="Asia/Kolkata" date "+%d-%m-%Y %H:%M:%S")
-commitMsg="Push Updated $timestamp IST"
+timestamp=$(TZ="Asia/Kolkata" date "+%b %d, %Y, %I:%M %p")
+commitMsg="GG System Last Synced $timestamp"
 
 echo -e "\033[36mDeploying with commit: $commitMsg\033[0m"
 

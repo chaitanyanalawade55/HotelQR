@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $ist = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, "India Standard Time")
-$timestamp = $ist.ToString("dd-MM-yyyy HH:mm:ss")
-$commitMsg = "Push Updated $timestamp IST"
+$timestamp = $ist.ToString("MMM dd, yyyy, hh:mm tt")
+$commitMsg = "CC System Last Synced $timestamp"
 
 Write-Host "Deploying with commit: $commitMsg" -ForegroundColor Cyan
 
