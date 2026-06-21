@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -83,7 +83,8 @@ function CountBadge({ count, className = "" }: { count: number; className?: stri
 export function DashboardShell({ hotel, isSuperAdmin = false, children }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
+  // createClient() is already a module-level singleton — no useMemo needed.
+  const supabase = createClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [newOrders, setNewOrders] = useState(0);
 
@@ -126,8 +127,9 @@ export function DashboardShell({ hotel, isSuperAdmin = false, children }: Dashbo
   async function handleLogout() {
     await supabase.auth.signOut();
     toast.success("Logged out");
-    router.push("/login");
-    router.refresh();
+    // Hard replace clears client-side state and lets middleware confirm the
+    // session is gone in a single round-trip — no router.refresh() needed.
+    window.location.replace("/login");
   }
 
   function isActive(href: string) {

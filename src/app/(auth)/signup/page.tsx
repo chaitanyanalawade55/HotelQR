@@ -7,6 +7,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 
+// Singleton — one Supabase client for the lifetime of this page.
+const supabase = createClient();
+
 function generateSlug(name: string) {
   return name
     .toLowerCase()
@@ -46,8 +49,6 @@ export default function SignupPage() {
     }
     setErrors({});
     setLoading(true);
-
-    const supabase = createClient();
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
@@ -102,8 +103,9 @@ export default function SignupPage() {
     }
 
     toast.success("Account created! Welcome to MenuQR 🎉");
-    router.push("/dashboard");
-    router.refresh();
+    // Hard replace — server reads the Supabase session cookie in one shot,
+    // no separate router.refresh() round-trip needed.
+    window.location.replace("/dashboard");
   }
 
   return (

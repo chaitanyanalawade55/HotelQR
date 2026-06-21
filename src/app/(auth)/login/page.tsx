@@ -99,6 +99,8 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onKeyDown={handleEmailKeyDown}
+                  autoComplete="email"
+                  autoFocus
                   required
                   disabled={phase !== "idle"}
                   className="w-full bg-white/10 border border-white/20 rounded-2xl px-4 py-3 pl-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent transition-all duration-150 disabled:opacity-60"
@@ -119,6 +121,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onBlur={handlePasswordBlur}
+                  autoComplete="current-password"
                   required
                   disabled={phase !== "idle"}
                   className="w-full bg-white/10 border border-white/20 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent transition-all duration-150 disabled:opacity-60"
