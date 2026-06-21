@@ -4,6 +4,9 @@
 -- Safe to re-run (idempotent).
 -- ============================================================
 
+
+
+
 -- 1. Faster slug lookups for the public menu (hotels.slug is already unique,
 --    so this is usually a no-op, but kept for completeness).
 create index if not exists idx_hotels_slug on hotels(slug);
