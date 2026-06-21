@@ -1,13 +1,9 @@
-export default function Loading() {
-  return (
-    <div className="px-4 py-6 space-y-4 animate-pulse">
-      <div className="h-6 w-40 bg-[#E5E7EB] rounded-2xl" />
-      <div className="grid grid-cols-2 gap-3">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-24 bg-[#E5E7EB] rounded-3xl" />
-        ))}
-      </div>
-      <div className="h-32 bg-[#E5E7EB] rounded-3xl" />
-    </div>
-  );
+// Next.js Suspense fallback for the entire /dashboard route segment.
+// Shown while dashboard/layout.tsx resolves the server auth + hotel query.
+// AdminLoader is full-screen and self-contained — no props needed here because
+// hotelName is not yet available (it's what the layout is still fetching).
+import { AdminLoader } from "@/components/ui/admin-loader";
+
+export default function DashboardLoading() {
+  return <AdminLoader />;
 }
