@@ -1,39 +1,63 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, Eye, EyeOff, UtensilsCrossed } from "lucide-react";
-import { toast } from "sonner";
+import { Mail, Lock, Eye, EyeOff, UtensilsCrossed, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+
+// Module-level singleton — never re-instantiated between submits.
+const supabase = createClient();
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "loading" | "success">("idle");
   const [error, setError] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
-  // Prefetch dashboard JS bundles while user types — shaves ~200ms off post-login navigation
+  // Prefetch dashboard JS bundles while user types.
   useEffect(() => { router.prefetch("/dashboard"); }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (phase === "loading" || phase === "success") return;
     setError("");
-    setLoading(true);
+    setPhase("loading");
 
-    const supabase = createClient();
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError) {
       setError("Invalid email or password");
-      setLoading(false);
+      setPhase("idle");
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
+    // Flash success for 200 ms then hard-replace — ensures the Supabase
+    // session cookie is read by the server without a separate router.refresh().
+    setPhase("success");
+    setTimeout(() => { window.location.replace("/dashboard"); }, 200);
+  }
+
+  // Enter on email field jumps to password instead of submitting empty.
+  function handleEmailKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      passwordRef.current?.focus();
+    }
+  }
+
+  // Auto-submit when password field loses focus (tab away / click elsewhere),
+  // but not when the user just toggled the eye button.
+  function handlePasswordBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const next = e.relatedTarget as HTMLElement | null;
+    if (next?.dataset.togglePassword) return;
+    if (email && password && phase === "idle") {
+      formRef.current?.requestSubmit();
+    }
   }
 
   return (
@@ -56,7 +80,7 @@ export default function LoginPage() {
       </div>
 
       <div className="flex-1 flex items-center justify-center px-5">
-        <form onSubmit={handleSubmit} className="w-full max-w-sm">
+        <form ref={formRef} onSubmit={handleSubmit} className="w-full max-w-sm">
           <h1 className="text-2xl font-bold text-white mb-1">Welcome back</h1>
           <p className="text-sm text-[#9CA3AF] mb-8">
             Log in to manage your digital menu.
@@ -74,8 +98,9 @@ export default function LoginPage() {
                   placeholder="you@restaurant.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={handleEmailKeyDown}
                   required
-                  disabled={loading}
+                  disabled={phase !== "idle"}
                   className="w-full bg-white/10 border border-white/20 rounded-2xl px-4 py-3 pl-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent transition-all duration-150 disabled:opacity-60"
                 />
               </div>
@@ -88,16 +113,19 @@ export default function LoginPage() {
                   <Lock size={16} />
                 </span>
                 <input
+                  ref={passwordRef}
                   type={showPassword ? "text" : "password"}
                   placeholder="Your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onBlur={handlePasswordBlur}
                   required
-                  disabled={loading}
+                  disabled={phase !== "idle"}
                   className="w-full bg-white/10 border border-white/20 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:border-transparent transition-all duration-150 disabled:opacity-60"
                 />
                 <button
                   type="button"
+                  data-toggle-password="true"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-white min-h-0 min-w-0 p-1"
                 >
@@ -114,10 +142,15 @@ export default function LoginPage() {
               variant="primary"
               size="lg"
               fullWidth
-              loading={loading}
-              className="mt-2"
+              loading={phase === "loading"}
+              disabled={phase === "success"}
+              className={`mt-2 transition-colors duration-150 ${phase === "success" ? "!bg-green-500" : ""}`}
             >
-              Log in
+              {phase === "success" ? (
+                <span className="flex items-center justify-center gap-2">
+                  <CheckCircle2 size={18} /> Logging in…
+                </span>
+              ) : "Log in"}
             </Button>
           </div>
 
