@@ -8,7 +8,7 @@ echo -e "\033[36mDeploying with commit: $commitMsg\033[0m"
 
 git add -A
 
-if [ -n "$(git status --porcelain)" ]; then
+if [ -n "$(git status --porcelain --ignore-submodules)" ]; then
     git commit -m "$commitMsg"
     echo -e "\033[32mCommitted\033[0m"
 else
