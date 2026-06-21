@@ -1,9 +1,9 @@
-# Skip non-essential files from Vercel uploads
+# Skip non-essential ROOT-level files from Vercel uploads
 .git
 .claude
 .DS_Store
 *.md
 *.ps1
 *.sh
-supabase
-scripts
+/supabase
+/scripts
