@@ -1,18 +1,9 @@
-# Skip uploading unnecessary files to Vercel
-node_modules
+# Skip non-essential files from Vercel uploads
 .git
 .claude
-.next
-supabase
-scripts
+.DS_Store
 *.md
 *.ps1
 *.sh
-.eslintrc.json
-tsconfig.json
-tailwind.config.ts
-postcss.config.js
-yarn.lock
-package-lock.json
-.env*
-.DS_Store
+supabase
+scripts
