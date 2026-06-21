@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser, getHotelByOwner } from "@/lib/supabase/cached-queries";
-import { OrdersLive } from "./orders-live";
-import type { HotelSettings, Order, TableQR, MenuItem } from "@/types/database";
+import { RevenueClient } from "./revenue-client";
+import type { HotelSettings, Order, TableQR } from "@/types/database";
 
-export default async function OrdersPage() {
+export default async function RevenuePage() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
@@ -13,26 +13,22 @@ export default async function OrdersPage() {
 
   const supabase = await createClient();
 
-  const [ordersRes, settingsRes, tablesRes, menuItemsRes] = await Promise.all([
+  const [ordersRes, settingsRes, tablesRes] = await Promise.all([
     supabase
       .from("orders")
       .select("*")
       .eq("hotel_id", hotel.id)
-      .order("created_at", { ascending: false })
-      .limit(200),
+      .order("created_at", { ascending: false }),
     supabase.from("hotel_settings").select("*").eq("hotel_id", hotel.id).maybeSingle(),
     supabase.from("tables").select("*").eq("hotel_id", hotel.id).order("created_at"),
-    supabase.from("menu_items").select("*").eq("hotel_id", hotel.id).eq("is_available", true).order("name"),
   ]);
 
   return (
-    <OrdersLive
+    <RevenueClient
       hotel={hotel}
       settings={(settingsRes.data as HotelSettings | null) ?? null}
       initialOrders={(ordersRes.data as Order[]) ?? []}
       initialTables={(tablesRes.data as TableQR[]) ?? []}
-      menuItems={(menuItemsRes.data as MenuItem[]) ?? []}
     />
   );
 }
-
