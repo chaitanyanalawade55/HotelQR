@@ -3,17 +3,16 @@
 /**
  * AdminLoader — full-screen enterprise loading screen for the MenuQR dashboard.
  *
- * Architecture decisions:
- *  • "use client" required for Framer Motion + intervals.
- *  • Module-level constants (DEFAULT_SLOGANS, SLOGAN_INTERVAL_MS) are evaluated
- *    once at import time — no recreation on render.
- *  • `mounted` guard: server renders a zero-content shell; client fills it after
- *    hydration. Prevents React hydration mismatches from Framer Motion's
- *    client-only animation values.
- *  • setInterval is always cleared in the useEffect cleanup — zero memory leaks.
- *  • Sub-components are wrapped in React.memo so parent re-renders (e.g. slogan
- *    index change) never re-render the spinner or dots.
- *  • Named motion imports only — no `import * as motion` to keep bundle tight.
+ * FM v12 compatibility notes (bugs fixed vs initial version):
+ *  1. motion.svg removed — SVG elements don't honour CSS transform-origin the
+ *     same way HTML elements do in Safari/Firefox. FM v12's style reconciler
+ *     throws when it tries to inject originX/originY onto an SVG node.
+ *     Fix: wrap the rotating arc in a motion.div; the inner svg is static.
+ *  2. boxShadow keyframe array removed — FM v12's value parser tokenises both
+ *     strings and requires identical token counts to interpolate. "0 0 0 0px"
+ *     and "0 0 0 10px" differ in the zero token format and the parser throws.
+ *     Fix: pulse via scale + opacity on a plain div ring instead.
+ *  3. originX/originY in style on motion.svg removed for the same reason as 1.
  */
 
 import { useState, useEffect, memo } from "react";
@@ -25,13 +24,13 @@ import { UtensilsCrossed } from "lucide-react";
 export interface AdminLoaderProps {
   /**
    * Hotel / restaurant name from Supabase.
-   * Title personalisation fires when the trimmed value is 1–50 characters.
-   * Undefined, null, empty, or >50 chars → generic fallback title.
+   * Personalised title when trimmed value is 1–50 characters.
+   * Undefined / null / empty / >50 chars → generic fallback.
    */
   hotelName?: string | null;
   /**
-   * Rotating slogans pulled from Supabase (e.g. a `settings` table row).
-   * When undefined or empty the built-in DEFAULT_SLOGANS are used instead.
+   * Rotating slogans (e.g. from a Supabase settings row).
+   * Falls back to DEFAULT_SLOGANS when undefined or empty.
    */
   slogans?: string[];
 }
@@ -47,15 +46,10 @@ const DEFAULT_SLOGANS: readonly string[] = [
   "Your guests deserve the best — so do you…",
 ];
 
-/** Exact duration between slogan transitions as required. */
 const SLOGAN_INTERVAL_MS = 5_000;
 
-// ─── title resolver ───────────────────────────────────────────────────────────
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Returns the personalised title when hotelName is usable (≤50 chars),
- * otherwise falls back to the generic form.
- */
 function resolveTitle(hotelName?: string | null): string {
   const name = hotelName?.trim();
   if (name && name.length >= 1 && name.length <= 50) {
@@ -67,71 +61,63 @@ function resolveTitle(hotelName?: string | null): string {
 // ─── SpinnerRing ──────────────────────────────────────────────────────────────
 
 /**
- * Indeterminate SVG ring spinner.
- * The track circle is static (no React re-render on tick).
- * The animated arc uses transform: rotate via Framer Motion — GPU-composited,
- * never triggers layout.
- * memo() ensures the dashboard title / slogan state changes never repaint this.
+ * Rotating arc built from two SVGs:
+ *  • A static track SVG (never re-rendered)
+ *  • A motion.div (CSS transform-origin safe) that wraps the arc SVG
+ *
+ * Pulse ring uses scale+opacity — no boxShadow animation (FM v12 parser bug).
  */
 const SpinnerRing = memo(function SpinnerRing() {
   return (
     <div className="relative w-[92px] h-[92px]" aria-hidden="true">
-      {/* Static track ring */}
+
+      {/* Static track ring — never animated, no layout cost */}
       <svg
         viewBox="0 0 92 92"
         className="absolute inset-0 w-full h-full"
         aria-hidden="true"
       >
         <circle
-          cx="46"
-          cy="46"
-          r="40"
+          cx="46" cy="46" r="40"
           fill="none"
           stroke="rgba(249,115,22,0.13)"
           strokeWidth="4.5"
         />
       </svg>
 
-      {/* Spinning arc — GPU layer via Framer rotate */}
-      <motion.svg
-        viewBox="0 0 92 92"
-        className="absolute inset-0 w-full h-full"
+      {/* Rotating arc — motion.div handles CSS transform-origin correctly
+          in every browser including Safari. The SVG inside is a passive child. */}
+      <motion.div
+        className="absolute inset-0"
         animate={{ rotate: 360 }}
         transition={{ duration: 1.25, repeat: Infinity, ease: "linear" }}
         style={{ originX: "50%", originY: "50%" }}
         aria-hidden="true"
       >
-        <defs>
-          <linearGradient id="arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#F97316" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#FDBA74" stopOpacity="1" />
-          </linearGradient>
-        </defs>
-        <circle
-          cx="46"
-          cy="46"
-          r="40"
-          fill="none"
-          stroke="url(#arc-grad)"
-          strokeWidth="4.5"
-          strokeLinecap="round"
-          strokeDasharray="188 63"
-        />
-      </motion.svg>
+        <svg viewBox="0 0 92 92" className="w-full h-full" aria-hidden="true">
+          <circle
+            cx="46" cy="46" r="40"
+            fill="none"
+            stroke="#F97316"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+            strokeDasharray="188 64"
+          />
+        </svg>
+      </motion.div>
 
-      {/* Outer glow pulse */}
+      {/* Pulse ring — scale+opacity only, NO boxShadow (FM v12 parser bug) */}
       <motion.div
-        className="absolute inset-0 rounded-full"
-        style={{ boxShadow: "0 0 0 0 rgba(249,115,22,0.3)" }}
-        animate={{ boxShadow: ["0 0 0 0px rgba(249,115,22,0.3)", "0 0 0 10px rgba(249,115,22,0)"] }}
-        transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+        className="absolute inset-0 rounded-full border-2 border-[#F97316]/30"
+        animate={{ scale: [1, 1.18, 1], opacity: [0.4, 0, 0.4] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
         aria-hidden="true"
       />
 
-      {/* Centred brand icon — breathes slowly */}
+      {/* Centred brand icon */}
       <div className="absolute inset-0 flex items-center justify-center">
         <motion.div
-          animate={{ scale: [1, 1.1, 1], opacity: [0.85, 1, 0.85] }}
+          animate={{ scale: [1, 1.1, 1], opacity: [0.8, 1, 0.8] }}
           transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
           aria-hidden="true"
         >
@@ -144,10 +130,6 @@ const SpinnerRing = memo(function SpinnerRing() {
 
 // ─── PulsingDots ──────────────────────────────────────────────────────────────
 
-/**
- * Three staggered dots that signal active work.
- * memo() prevents re-renders from slogan index state.
- */
 const PulsingDots = memo(function PulsingDots() {
   return (
     <div className="flex items-center gap-[7px]" aria-hidden="true">
@@ -174,12 +156,11 @@ export const AdminLoader = memo(function AdminLoader({
   hotelName,
   slogans: slogansProp,
 }: AdminLoaderProps) {
-  // Hydration guard — server emits a static shell; animations mount only after
-  // the client has committed its first paint.
+  // Hydration guard — server emits a static shell; Framer Motion only mounts
+  // after the client's first commit. Prevents SSR/CSR tree mismatches.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Resolve the active slogan list: user-provided or built-in fallback.
   const slogans =
     slogansProp && slogansProp.length > 0
       ? slogansProp
@@ -188,22 +169,21 @@ export const AdminLoader = memo(function AdminLoader({
   const [sloganIdx, setSloganIdx] = useState(0);
 
   useEffect(() => {
-    if (slogans.length <= 1) return; // nothing to rotate
+    if (slogans.length <= 1) return;
     const id = setInterval(
       () => setSloganIdx((prev) => (prev + 1) % slogans.length),
       SLOGAN_INTERVAL_MS,
     );
-    return () => clearInterval(id); // ← always cleared — no memory leak
+    return () => clearInterval(id); // ← always cleared, zero memory leaks
   }, [slogans]);
 
   const title = resolveTitle(hotelName);
 
-  // ── Static shell (SSR / pre-hydration) ─────────────────────────────────────
-  // Matches the client tree structurally so React never sees a mismatch.
+  // ── Static shell (SSR / pre-hydration) ──────────────────────────────────
   if (!mounted) {
     return (
       <div
-        className="fixed inset-0 z-50 bg-[#1C1C2E] flex items-center justify-center"
+        className="fixed inset-0 z-50 bg-[#1C1C2E]"
         role="status"
         aria-live="polite"
         aria-label={title}
@@ -211,7 +191,7 @@ export const AdminLoader = memo(function AdminLoader({
     );
   }
 
-  // ── Animated client shell ───────────────────────────────────────────────────
+  // ── Animated client shell ────────────────────────────────────────────────
   return (
     <div
       className="fixed inset-0 z-50 overflow-hidden bg-[#1C1C2E] flex flex-col select-none"
@@ -219,36 +199,27 @@ export const AdminLoader = memo(function AdminLoader({
       aria-live="polite"
       aria-label={title}
     >
-      {/* ── Progress bar ───────────────────────────────────────────────────── */}
-      {/* Fakes a deterministic load: races toward ~96 % then holds. */}
+      {/* ── Progress bar ─────────────────────────────────────────────────── */}
       <div className="absolute top-0 left-0 right-0 h-[3px] bg-white/[0.06] z-20">
         <motion.div
-          className="h-full"
-          style={{
-            originX: 0,
-            background:
-              "linear-gradient(90deg, #F97316 0%, #FB923C 60%, #FDBA74 100%)",
-          }}
+          className="h-full bg-gradient-to-r from-[#F97316] via-[#FB923C] to-[#FDBA74]"
+          style={{ originX: 0 }}
           initial={{ scaleX: 0 }}
           animate={{ scaleX: [0, 0.55, 0.75, 0.87, 0.93, 0.96] }}
           transition={{
             duration: 10,
             ease: "easeOut",
-            times: [0, 0.15, 0.35, 0.6, 0.82, 1],
+            times: [0, 0.15, 0.35, 0.60, 0.82, 1],
           }}
         />
       </div>
 
-      {/* ── Ambient background blobs ───────────────────────────────────────── */}
-      {/* GPU-composited transforms only — zero layout thrashing. */}
+      {/* ── Ambient blobs — transform-only, GPU layer, no layout ──────────── */}
       <motion.div
-        className="absolute pointer-events-none"
+        className="absolute rounded-full pointer-events-none"
         style={{
-          top: "-20%",
-          left: "-20%",
-          width: 600,
-          height: 600,
-          borderRadius: "50%",
+          top: "-20%", left: "-20%",
+          width: 600, height: 600,
           background:
             "radial-gradient(circle, rgba(249,115,22,0.08) 0%, transparent 68%)",
           filter: "blur(72px)",
@@ -258,13 +229,10 @@ export const AdminLoader = memo(function AdminLoader({
         aria-hidden="true"
       />
       <motion.div
-        className="absolute pointer-events-none"
+        className="absolute rounded-full pointer-events-none"
         style={{
-          bottom: "-20%",
-          right: "-20%",
-          width: 520,
-          height: 520,
-          borderRadius: "50%",
+          bottom: "-20%", right: "-20%",
+          width: 520, height: 520,
           background:
             "radial-gradient(circle, rgba(99,102,241,0.07) 0%, transparent 68%)",
           filter: "blur(72px)",
@@ -273,18 +241,19 @@ export const AdminLoader = memo(function AdminLoader({
         transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
         aria-hidden="true"
       />
-      {/* Subtle grid texture overlay — only visual, pointer events off */}
+      {/* Subtle grid texture */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)",
+            "linear-gradient(rgba(255,255,255,0.018) 1px,transparent 1px)," +
+            "linear-gradient(90deg,rgba(255,255,255,0.018) 1px,transparent 1px)",
           backgroundSize: "48px 48px",
         }}
         aria-hidden="true"
       />
 
-      {/* ── Logo — top-left ────────────────────────────────────────────────── */}
+      {/* ── Logo ─────────────────────────────────────────────────────────── */}
       <motion.div
         className="absolute top-6 left-6 flex items-center gap-2.5 z-10"
         initial={{ opacity: 0, x: -16 }}
@@ -305,7 +274,7 @@ export const AdminLoader = memo(function AdminLoader({
         </span>
       </motion.div>
 
-      {/* ── Centre stack ───────────────────────────────────────────────────── */}
+      {/* ── Centre stack ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col items-center justify-center gap-9 px-6">
 
         {/* Spinner */}
@@ -324,16 +293,11 @@ export const AdminLoader = memo(function AdminLoader({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.14, ease: "easeOut" }}
         >
-          {/* Static title — changes only when hotelName prop changes. */}
-          <h1
-            className="text-white text-[18px] font-semibold leading-snug tracking-[-0.015em]"
-            // Screen readers read this immediately via aria-label on the wrapper.
-            aria-hidden="true"
-          >
+          <h1 className="text-white text-[18px] font-semibold leading-snug tracking-[-0.015em]" aria-hidden="true">
             {title}
           </h1>
 
-          {/* Slogan carousel — fixed-height container prevents layout shift. */}
+          {/* Fixed-height container prevents layout shift between slogans */}
           <div className="h-[22px] flex items-center justify-center overflow-hidden w-full">
             <AnimatePresence mode="wait">
               <motion.p
@@ -343,7 +307,6 @@ export const AdminLoader = memo(function AdminLoader({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -9 }}
                 transition={{ duration: 0.36, ease: "easeInOut" }}
-                // Each new slogan is announced to screen readers.
                 aria-live="polite"
                 aria-atomic="true"
               >
@@ -353,7 +316,7 @@ export const AdminLoader = memo(function AdminLoader({
           </div>
         </motion.div>
 
-        {/* Pulsing activity indicator */}
+        {/* Pulsing dots */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -363,9 +326,9 @@ export const AdminLoader = memo(function AdminLoader({
         </motion.div>
       </div>
 
-      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      {/* ── Footer ───────────────────────────────────────────────────────── */}
       <motion.p
-        className="absolute bottom-5 left-0 right-0 text-center text-[11px] text-white/18 tracking-wide"
+        className="absolute bottom-5 left-0 right-0 text-center text-[11px] text-white/20 tracking-wide"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.4, delay: 0.5 }}

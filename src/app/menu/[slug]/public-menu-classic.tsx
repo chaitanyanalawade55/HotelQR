@@ -691,9 +691,7 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         persistent={true}
         items={specialtyItems}
         themeColor={themeColor}
-        cartQty={cartQty}
         onAdd={(id) => { const it = items.find((i) => i.id === id); if (it) addToCart(it); }}
-        onRemove={(id) => changeQty(id, -1)}
         onViewMenu={() => specialCat && selectCat(specialCat.id)}
       />
 
