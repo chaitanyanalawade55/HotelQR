@@ -11,10 +11,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser, getHotelByOwner } from "@/lib/supabase/cached-queries";
 import { MenuLinkActions } from "./menu-link-actions";
-
-// Only select the columns we render on this page.
-const HOTEL_COLS = "id,name,slug,owner_id,status";
 
 type Step = {
   key: string;
@@ -26,20 +24,14 @@ type Step = {
 };
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Cache hits — layout already called these; no extra DB round-trips.
+  const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  const { data: hotel } = await supabase
-    .from("hotels")
-    .select(HOTEL_COLS)
-    .eq("owner_id", user.id)
-    .single();
-
+  const hotel = await getHotelByOwner(user.id);
   if (!hotel) redirect("/login");
+
+  const supabase = await createClient();
 
   // Counts + onboarding signals, all in parallel.
   const [itemRes, catRes, availRes, settingsRes, paymentRes] = await Promise.all([

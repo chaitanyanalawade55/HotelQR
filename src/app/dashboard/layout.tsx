@@ -1,37 +1,24 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser, getHotelByOwner } from "@/lib/supabase/cached-queries";
 import { DashboardShell } from "./shell";
 import type { Hotel } from "@/types/database";
-
-// Only select the columns the shell actually uses — not SELECT *
-const HOTEL_COLS = "id,name,slug,owner_id,status,address,phone,owner_email";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
+  // Both calls are memoised per-request — if dashboard/page.tsx calls them
+  // too, they return cached results without hitting the DB again.
+  const user = await getAuthUser();
+  if (!user) redirect("/login");
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: hotel } = await supabase
-    .from("hotels")
-    .select(HOTEL_COLS)
-    .eq("owner_id", user.id)
-    .single();
-
-  if (!hotel) {
-    redirect("/login");
-  }
+  const hotel = await getHotelByOwner(user.id);
+  if (!hotel) redirect("/login");
 
   // Super-admin flag for the nav link (graceful if migration 0008 isn't applied).
+  const supabase = await createClient();
   const { data: isSuperAdmin } = await supabase.rpc("is_super_admin");
 
   return (

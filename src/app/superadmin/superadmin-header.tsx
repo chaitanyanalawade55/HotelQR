@@ -1,6 +1,7 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, LogOut } from "lucide-react";
+import { ShieldCheck, LogOut, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 
@@ -22,12 +23,20 @@ export function SuperAdminHeader() {
           <ShieldCheck size={18} className="text-[#F97316]" />
           <span className="text-white font-semibold">Super Admin</span>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white min-h-0 min-w-0"
-        >
-          <LogOut size={15} /> Sign out
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/superadmin/status"
+            className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white min-h-0 min-w-0"
+          >
+            <Activity size={15} /> Status
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white min-h-0 min-w-0"
+          >
+            <LogOut size={15} /> Sign out
+          </button>
+        </div>
       </div>
     </header>
   );

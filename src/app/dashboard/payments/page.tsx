@@ -1,20 +1,13 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthUser, getHotelByOwner } from "@/lib/supabase/cached-queries";
 import { getHotelPayment } from "@/app/actions/hotel";
 import { AdminSettingsForm } from "@/components/AdminSettingsForm";
 
 export default async function PaymentsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  const { data: hotel } = await supabase
-    .from("hotels")
-    .select("id")
-    .eq("owner_id", user.id)
-    .single();
+  const hotel = await getHotelByOwner(user.id);
   if (!hotel) redirect("/login");
 
   // Decrypted server-side via the ownership-checked RPC (returns null pre-migration).

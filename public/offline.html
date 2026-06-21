@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#F97316" />
+  <title>Offline — MenuQR</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #1C1C2E;
+      color: #fff;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 24px;
+      text-align: center;
+    }
+    .icon {
+      width: 72px; height: 72px;
+      background: #F97316;
+      border-radius: 18px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; margin-top: 8px; }
+    p  { font-size: 0.9rem; color: #9CA3AF; max-width: 280px; line-height: 1.5; }
+    button {
+      margin-top: 8px;
+      background: #F97316;
+      color: #fff;
+      border: none;
+      border-radius: 16px;
+      padding: 12px 28px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="icon">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="8" y1="6" x2="8" y2="12"/><line x1="10" y1="6" x2="10" y2="12"/>
+      <path d="M8 12c0 1.1.9 2 2 2v8"/><path d="M16 2v8c0 1.1-.9 2-2 2h1v8"/>
+    </svg>
+  </div>
+  <h1>You're offline</h1>
+  <p>Check your internet connection and try again. Your menu data will load once you're back online.</p>
+  <button onclick="window.location.reload()">Try again</button>
+</body>
+</html>

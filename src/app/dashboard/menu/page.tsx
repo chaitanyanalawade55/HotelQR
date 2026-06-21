@@ -1,23 +1,17 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser, getHotelByOwner } from "@/lib/supabase/cached-queries";
 import { MenuManager } from "./menu-manager";
 import type { Category, MenuItem } from "@/types/database";
 
 export default async function MenuPage() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  const { data: hotel } = await supabase
-    .from("hotels")
-    .select("id")
-    .eq("owner_id", user.id)
-    .single();
-
+  const hotel = await getHotelByOwner(user.id);
   if (!hotel) redirect("/login");
+
+  const supabase = await createClient();
 
   const { data: categories } = await supabase
     .from("categories")

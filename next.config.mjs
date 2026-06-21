@@ -14,6 +14,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_BUILD_SHA: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7),
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+    NEXT_PUBLIC_DEPLOYER: process.env.DEPLOYER || "",
   },
 
   // ── Image optimization (mobile-first — QR scan = always phone) ──
@@ -46,6 +47,29 @@ const nextConfig = {
         source: "/_next/static/:path*",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      // Service worker — must never be cached (browser checks for updates on every load)
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      // PWA manifest — short TTL so installs pick up icon/name changes quickly
+      {
+        source: "/manifest.json",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+          { key: "Content-Type", value: "application/manifest+json" },
+        ],
+      },
+      // PWA icons — week TTL (bump CACHE_VER in sw.js to bust on icon changes)
+      {
+        source: "/icons/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
         ],
       },
       // Security headers — all routes

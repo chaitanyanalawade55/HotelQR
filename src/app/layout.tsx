@@ -1,18 +1,26 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "MenuQR — Digital Menu Platform",
-  description: "Replace printed menus with a branded digital menu customers access by scanning a QR code.",
+  description:
+    "Replace printed menus with a branded digital menu customers access by scanning a QR code.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MenuQR",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 5, // allow pinch zoom — accessibility
+  maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#1C1C2E",
+  themeColor: "#F97316",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -38,10 +46,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&display=swap"
           />
         </noscript>
+        {/* PWA icons */}
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
       </head>
       <body>
         {children}
         <Toaster position="top-center" richColors />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
