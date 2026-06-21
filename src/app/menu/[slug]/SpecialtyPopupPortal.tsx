@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChefHat, ChevronRight, X, Plus } from "lucide-react";
@@ -72,6 +72,11 @@ export function SpecialtyPopupPortal({
   const [barVisible, setBarVisible] = useState(false);
   const [sheetOpen,  setSheetOpen]  = useState(false);
 
+  // Tracks whether the sheet was closed via "View in menu" navigation vs a
+  // normal dismiss. Set synchronously before setSheetOpen so the effect below
+  // can read it before React re-renders and resets it.
+  const navigatingRef = useRef(false);
+
   useEffect(() => setMounted(true), []);
 
   // Show bar shortly after mount.
@@ -86,9 +91,14 @@ export function SpecialtyPopupPortal({
     return () => { clearTimeout(show); clearTimeout(hide); };
   }, [isEnabled, durationSeconds, persistent]);
 
-  // In persistent mode: restore bar when the sheet is closed.
+  // In persistent mode: restore bar when the sheet is dismissed normally.
+  // Skip when the user navigated away via "View in menu" — bar stays hidden
+  // so it doesn't pop back over the section they just jumped to.
   useEffect(() => {
-    if (persistent && !sheetOpen && isEnabled) setBarVisible(true);
+    if (persistent && !sheetOpen && isEnabled && !navigatingRef.current) {
+      setBarVisible(true);
+    }
+    navigatingRef.current = false; // reset after each close
   }, [sheetOpen, persistent, isEnabled]);
 
   if (!mounted || !isEnabled) return null;
@@ -97,8 +107,15 @@ export function SpecialtyPopupPortal({
   const gradEnd = themeColor + "E0";
 
   function openSheet() {
-    if (!persistent) setBarVisible(false); // non-persistent: hide bar while sheet is open
+    if (!persistent) setBarVisible(false);
     setSheetOpen(true);
+  }
+
+  function handleViewMenu() {
+    navigatingRef.current = true; // tell the effect not to restore the bar
+    setBarVisible(false);
+    setSheetOpen(false);
+    onViewMenu?.();
   }
 
   return createPortal(
@@ -327,7 +344,7 @@ export function SpecialtyPopupPortal({
               {onViewMenu && (
                 <div className="px-5 pb-7 pt-2 shrink-0">
                   <button
-                    onClick={() => { setSheetOpen(false); onViewMenu(); }}
+                    onClick={handleViewMenu}
                     className="w-full rounded-2xl py-3.5 text-sm font-bold text-white shadow-md"
                     style={{
                       background: `linear-gradient(135deg, ${themeColor} 0%, ${gradEnd} 100%)`,

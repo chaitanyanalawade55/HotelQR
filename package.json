@@ -11,6 +11,8 @@
     "deploy:win": "powershell -ExecutionPolicy Bypass -File deploy.ps1"
   },
   "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.31.0",
+    "@anthropic-ai/sdk": "^0.105.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -19,6 +21,7 @@
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "framer-motion": "^12.40.0",
+    "headroom-ai": "^0.22.4",
     "lucide-react": "^0.441.0",
     "next": "14.2.5",
     "qrcode": "^1.5.4",
